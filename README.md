@@ -24,6 +24,7 @@ retrieval (clearance / free-path) that object-box query languages cannot express
 - `experiments/occquery_v0/` — first falsifiable experiment
 - `tests/` — unit tests (TDD; core primitive first)
 - `data/` — datasets (gitignored; never committed)
+- `web/` — visualization / build-in-public site (Next.js + Tailwind, deployed on Vercel); reads experiment results
 
 ## Setup (once implementation starts)
 
