@@ -1,0 +1,25 @@
+# datasets & model weights — never committed
+data/
+*.pth
+*.ckpt
+*.npz
+*.bin
+
+# experiment outputs (keep a hand-written summary.md, ignore raw dumps)
+experiments/**/results/*
+!experiments/**/results/summary.md
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,27 @@
+# Hand-compiled NL -> predicate queries for occquery_v0.
+# `refav_expressible` records whether RefAV's 28 cuboid+velocity functions could express
+# the query at all (the expressivity-gap evidence). Expand to ~20 before M4.
+
+queries:
+  - id: tight_clearance_at_speed
+    nl: "ego passed within 0.5 m of something while going faster than 30 km/h"
+    predicate: "lateral_clearance(scene, t) < 0.5 and ego_speed(scene, t) > 8.33"
+    refav_expressible: false   # clearance to nearest *occupied space* is not a box function
+    rationale: "obstacle may be a wall/debris/curb with no object box"
+
+  - id: corridor_narrows_below_vehicle_width
+    nl: "the only free path ahead narrowed to less than the car's width"
+    predicate: "min_free_width_along_path(scene, t, horizon=2.0) < ego_width(scene)"
+    refav_expressible: false
+    rationale: "free-space width is a property of empty space, not of any object"
+
+  - id: blocked_then_clears
+    nl: "the planned path was blocked then became free within 2 seconds"
+    predicate: "not free_along_ego_path(scene, t, 0.0) and free_along_ego_path(scene, t, 2.0)"
+    refav_expressible: false
+
+  - id: near_a_tracked_vehicle           # control: a query boxes CAN express
+    nl: "ego came within 2 m of another vehicle"
+    predicate: "distance_to_nearest(scene, t, class='vehicle') < 2.0"
+    refav_expressible: true
+    rationale: "fairness control — both representations should answer this; box wins on ease"
