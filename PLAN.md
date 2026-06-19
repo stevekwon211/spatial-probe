@@ -217,6 +217,33 @@ robustness curve (v1).
   abstraction in `core` — extract on second use only.
 - Validation kept light (dataclasses); no heavy framework.
 
+### Performance & the Rust core (`core-rs`) — later, not now
+
+v0–v1 stay pure Python + numpy: correctness and falsifiability matter, not speed (the DDA
+primitive vectorizes; heavy lifting is PyTorch = C++/CUDA). Do NOT add Rust now — premature
+optimization (a known over-engineering trap). Escalate only when profiling shows the
+raycast/predicate loop is the real bottleneck at dataset scale: `numpy → numba → Rust`.
+
+When Rust earns its place — expected around **M4** (the interactive web demo needs the same
+query logic client-side), or earlier if full-val raycast is the bottleneck — extract the hot
+kernel ONCE into a Rust crate and wire both runtimes to it. This is the "extract on second
+use" rule applied at the language boundary:
+
+```
+core-rs  (Rust: voxel / DDA raycast / predicate kernel)        <- single implementation
+   |-- PyO3 (maturin)      ->  probe (Python)   : research experiments call the fast kernel
+   |-- WASM (wasm-bindgen) ->  web/             : the browser demo runs the SAME kernel client-side
+```
+
+The canonical "Python API + Rust core" pattern (polars, tokenizers, ruff) plus a WASM build
+for the web = one kernel, multiple runtimes (the SPACE0 one-engine pattern). Reuses Doeon's
+existing Rust voxel engine.
+
+Web performance: TypeScript erases to JavaScript at runtime (no perf cost vs vanilla JS —
+types are pure upside). Heavy work is never in JS: 3D occupancy rendering runs on the GPU
+via three.js / WebGPU; heavy client-side compute (live predicate queries) runs in Rust→WASM.
+JS/TS is the orchestration shell only.
+
 ---
 
 ## 9. Public / private + build-in-public

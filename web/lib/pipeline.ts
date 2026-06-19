@@ -1,9 +1,11 @@
-// The research program, placed on the data-OS pipeline it serves.
-// Each module is one falsifiable diagnostic; status reflects the Python repo.
+// The research program, placed in order on the data pipeline it serves.
+// Six falsifiable diagnostics, one per stage; status reflects the Python repo.
 
-export type Status = "in-progress" | "planned";
+import { Database, RefreshCw, Search, ShieldCheck, type LucideIcon } from "lucide-react";
 
-export interface ResearchModule {
+export type Status = "done" | "in-progress" | "planned";
+
+export interface ModuleItem {
   id: string;
   title: string;
   axis: string;
@@ -16,7 +18,8 @@ export interface Stage {
   id: string;
   name: string;
   blurb: string;
-  modules: ResearchModule[];
+  icon: LucideIcon;
+  modules: ModuleItem[];
 }
 
 export const THESIS =
@@ -25,8 +28,9 @@ export const THESIS =
 export const PIPELINE: Stage[] = [
   {
     id: "ingest",
-    name: "Ingest / Data Engine",
+    name: "Ingest",
     blurb: "Raw multi-sensor logs become 3D state: objects, HD map, occupancy.",
+    icon: Database,
     modules: [
       {
         id: "asof",
@@ -35,16 +39,7 @@ export const PIPELINE: Stage[] = [
         oneLine:
           "Does the converted state preserve action-relevant signal, or only look right? An acceptance gate at the door.",
         status: "planned",
-        statusLabel: "planned",
-      },
-      {
-        id: "gt-distrust-ingest",
-        title: "GT-distrust",
-        axis: "visibility",
-        oneLine:
-          "Occlusion geometry predicts which occupancy labels are untrustworthy — before they pollute training.",
-        status: "planned",
-        statusLabel: "planned",
+        statusLabel: "Planned",
       },
     ],
   },
@@ -53,6 +48,7 @@ export const PIPELINE: Stage[] = [
     name: "Search",
     blurb:
       "Find scenes by measured physical quantities — reproducibly, no hallucination.",
+    icon: Search,
     modules: [
       {
         id: "occquery",
@@ -69,15 +65,16 @@ export const PIPELINE: Stage[] = [
     id: "qa",
     name: "QA / Review",
     blurb: "Decide where auto-labels are safe and where a human must look.",
+    icon: ShieldCheck,
     modules: [
       {
-        id: "gt-distrust-qa",
+        id: "gt-distrust",
         title: "GT-distrust",
         axis: "visibility",
         oneLine:
-          "A geometric review trigger — point the checkers at the labels most likely wrong.",
+          "Occlusion geometry predicts which occupancy labels are untrustworthy — a geometric review trigger.",
         status: "planned",
-        statusLabel: "planned",
+        statusLabel: "Planned",
       },
       {
         id: "calibration",
@@ -86,7 +83,7 @@ export const PIPELINE: Stage[] = [
         oneLine:
           "Is the model's confidence honest where the sensor cannot see? Catch the silent overconfidence.",
         status: "planned",
-        statusLabel: "planned",
+        statusLabel: "Planned",
       },
     ],
   },
@@ -94,6 +91,7 @@ export const PIPELINE: Stage[] = [
     id: "loop",
     name: "Curation / Loop",
     blurb: "Pick what to fix and what to label so the model actually improves.",
+    icon: RefreshCw,
     modules: [
       {
         id: "value",
@@ -102,7 +100,7 @@ export const PIPELINE: Stage[] = [
         oneLine:
           "Rank scenes by how much fixing a label actually moves the model — not by how many are wrong.",
         status: "planned",
-        statusLabel: "planned",
+        statusLabel: "Planned",
       },
       {
         id: "dynfield",
@@ -111,8 +109,16 @@ export const PIPELINE: Stage[] = [
         oneLine:
           "Which stored motion fields a planner truly needs — and in which moments (cut-in, hard brake, low TTC).",
         status: "planned",
-        statusLabel: "planned",
+        statusLabel: "Planned",
       },
     ],
   },
 ];
+
+export const ALL_MODULES = PIPELINE.flatMap((s) => s.modules);
+export const TOTAL = ALL_MODULES.length;
+export const SHIPPED = ALL_MODULES.filter((m) => m.status === "done").length;
+export const IN_PROGRESS = ALL_MODULES.filter(
+  (m) => m.status === "in-progress",
+).length;
+export const PIPELINE_RUNNABLE = SHIPPED === TOTAL;
