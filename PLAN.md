@@ -150,11 +150,15 @@ substrate number.)
 `free_along_ego_path`, and `min_free_width_along_path`. All carry an explicit `UnknownPolicy`
 (free / occupied / ignored).
 
-**Oracle.** GT/LiDAR-derived clearance and free-space, reconstructed INDEPENDENTLY of the occupancy
-field under test (so field quality and oracle are not the same artifact). It is author-reconstructed,
-so we say so plainly and RELEASE the oracle-construction code + held-out scene IDs. Main validity
-threat = `unobserved` voxels: evaluate under all three `UnknownPolicy` rules and report denotation
-sensitivity; instability across the rules is the test failing, not a footnote.
+**Oracle.** Occ3D-nuScenes dense GT occupancy -- the accumulated, near-fully-observed `semantics`
+field -- with clearance / free-space computed geometrically from it. Verified 2026-06-20 on the 10
+mini scenes: on the dense GT, denotation is STABLE across the three `UnknownPolicy` rules (the GT
+has ~0 unknown), so the premise holds. The per-frame visibility mask (~88% unknown on a single
+lidar sweep) is deliberately NOT applied to the oracle -- masking the dense GT makes denotation
+depend on the unknown policy rather than the geometry (it produces the section-4 kill shape on real
+data). That masked observed view is instead the conditioning variable for gt-distrust /
+vis-calibration and the predicted-occupancy robustness arm (v1), where the 3-rule unknown
+sensitivity is the real test. RELEASE the oracle-construction code + held-out scene IDs.
 
 **Baseline.** RefAV's released function set — demonstrate the spatial subset is *inexpressible* there
 (H1), and that the best box-only approximation loses to free-space predicates by >= 20 F1 (H3).
