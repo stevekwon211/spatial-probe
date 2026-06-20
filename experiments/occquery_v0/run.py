@@ -1,86 +1,185 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Doeon Kwon
-"""Run occquery_v0 over the synthetic scenes and report denotation metrics.
+"""Run occquery_v0 over the synthetic scenes and write denotation metrics.
 
-Each query in queries.yaml is a small expression over the predicate functions. We
-evaluate it on every (scene, frame); a scene is *retrieved* if any frame satisfies it.
-The retrieved set is scored against the hand-labeled ground truth (denotation P/R/F1).
-Queries whose predicates are not yet in the v0 core are reported as SKIP.
+Loads the schema-validated queries, evaluates each occupancy query over every scene under the
+three unknown policies (free / occupied / ignored), scores the retrieved set against the
+hand-labeled ground truth, and reports the tracking-baseline query separately. Writes a
+machine-readable JSON and a human Markdown summary that keeps the result classes distinct
+(unit test vs synthetic smoke vs externally validated -- the last is NONE yet).
 
-No dataset: `synthetic.SCENES` is hand-built. At M2, swap in adapter-loaded scenes and the
-same loop yields the real numbers. Usage: `python experiments/occquery_v0/run.py`.
+No dataset: `synthetic.SCENES` is hand-built. At M2, swap in adapter-loaded scenes and the same
+engine yields the real numbers. Usage: `python experiments/occquery_v0/run.py`.
 """
 from __future__ import annotations
 
+import json
 import pathlib
+import subprocess
 import sys
 
 _HERE = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE.parents[1] / "src"))  # make `probe` importable when run as a script
+sys.path.insert(0, str(_HERE.parents[1] / "src"))  # make `probe` importable as a script
 sys.path.insert(0, str(_HERE))                      # make `synthetic` importable
 
-import yaml
-
-from probe.predicates.clearance import lateral_clearance
-from probe.predicates.freepath import free_along_ego_path
-from probe.query_dsl import UnsafeExpression, safe_eval
-from probe.scene import Scene
+from probe.grid import UnknownPolicy
+from probe.query_spec import load_queries
+from probe.retrieval import retrieved
 from synthetic import GROUND_TRUTH, SCENES
 
+_SEED = 0  # synthetic geometry is deterministic; recorded for provenance
 
-def _namespace(scene: Scene) -> dict:
-    """The only identifiers a query may reference. The expression is evaluated by
-    probe.query_dsl.safe_eval (a whitelist AST walker), never by Python eval()."""
+
+def _prf1(ret: set[str], truth: set[str]) -> dict:
+    ret, truth = set(ret), set(truth)
+    tp = len(ret & truth)
+    precision = tp / len(ret) if ret else 1.0
+    recall = tp / len(truth) if truth else 1.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
     return {
-        "scene": scene,
-        "lateral_clearance": lambda sc, t: lateral_clearance(sc.grid_at(t), sc.ego_at(t)),
-        "free_along_ego_path": lambda sc, t, h: free_along_ego_path(sc.grid_at(t), sc.ego_at(t), h),
-        "ego_speed": lambda sc, t: sc.ego_speed(t),
-        "ego_width": lambda sc: sc.ego_width(),
+        "precision": round(precision, 3),
+        "recall": round(recall, 3),
+        "f1": round(f1, 3),
+        "false_positives": sorted(ret - truth),
+        "false_negatives": sorted(truth - ret),
     }
 
 
-def _scene_matches(scene: Scene, predicate: str) -> bool:
-    for t in scene.times():
-        names = _namespace(scene)
-        names["t"] = t
-        if bool(safe_eval(predicate, names)):
-            return True
-    return False
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_HERE, text=True).strip()
+    except Exception:  # noqa: BLE001 - provenance only; never fail the run over it
+        return "unknown"
 
 
-def _prf1(retrieved: set[str], truth: set[str]) -> tuple[float, float, float]:
-    tp = len(retrieved & truth)
-    p = tp / len(retrieved) if retrieved else 1.0
-    r = tp / len(truth) if truth else 1.0
-    f1 = 2 * p * r / (p + r) if (p + r) else 0.0
-    return p, r, f1
+def _evaluate_occupancy(query, gt: set[str]) -> dict:
+    free = retrieved(SCENES, query, UnknownPolicy.FREE)
+    occ = retrieved(SCENES, query, UnknownPolicy.OCCUPIED)
+    undetermined = free ^ occ  # scenes whose membership flips with the unknown policy
+    ignored = free & occ       # determined matches only
+    return {
+        "scope": query.scope,
+        "refav_expressible": query.refav_expressible,
+        "gt": sorted(gt),
+        "unknown_stable": free == occ,
+        "per_policy": {
+            "free": {"retrieved": sorted(free), **_prf1(free, gt)},
+            "occupied": {"retrieved": sorted(occ), **_prf1(occ, gt)},
+            "ignored": {"retrieved": sorted(ignored), "undetermined": sorted(undetermined), **_prf1(ignored, gt)},
+        },
+    }
+
+
+def _evaluate_baseline(query, gt: set[str]) -> dict:
+    ret = retrieved(SCENES, query, UnknownPolicy.FREE)  # unknown policy is irrelevant for tracking
+    return {
+        "backend": query.backend,
+        "status": query.status,
+        "scope": query.scope,
+        "refav_expressible": query.refav_expressible,
+        "gt": sorted(gt),
+        "retrieved": sorted(ret),
+        **_prf1(ret, gt),
+    }
+
+
+def build_report() -> dict:
+    queries = load_queries(_HERE / "queries.yaml")
+    occupancy: dict = {}
+    baseline: dict = {}
+    for q in queries:
+        gt = set(GROUND_TRUTH.get(q.id, set()))
+        if q.is_occupancy:
+            occupancy[q.id] = _evaluate_occupancy(q, gt)
+        else:
+            baseline[q.id] = _evaluate_baseline(q, gt)
+    n = len(queries)
+    n_refav = sum(1 for q in queries if q.refav_expressible)
+    return {
+        "experiment": "occquery_v0",
+        "result_class": "synthetic-smoke",
+        "disclaimer": (
+            "Hand-built scenes with constructed ground truth. Verifies the retrieval loop and "
+            "predicate behavior on known geometry; NOT an externally validated scientific result. "
+            "External numbers require the M2 nuScenes/Occ3D adapter."
+        ),
+        "commit": _git_commit(),
+        "seed": _SEED,
+        "n_scenes": len(SCENES),
+        "scenes": [s.name for s in SCENES],
+        "expressibility_coverage": {"occupancy": f"{n}/{n}", "refav": f"{n_refav}/{n}"},
+        "occupancy_queries": occupancy,
+        "baseline_queries": baseline,
+    }
+
+
+def _render_md(rep: dict) -> str:
+    lines = [
+        "# occquery_v0 -- synthetic smoke-test results",
+        "",
+        f"**Result class: {rep['result_class'].upper()}.** {rep['disclaimer']}",
+        "",
+        f"- commit: `{rep['commit']}`",
+        f"- seed: {rep['seed']}",
+        f"- scenes ({rep['n_scenes']}): {', '.join(rep['scenes'])}",
+        f"- expressibility coverage: occupancy {rep['expressibility_coverage']['occupancy']}, "
+        f"RefAV {rep['expressibility_coverage']['refav']}",
+        "",
+        "## Occupancy queries (denotation vs constructed GT)",
+        "",
+        "| query | scope | F1 (free) | F1 (occupied) | unknown-stable | GT |",
+        "|---|---|---|---|---|---|",
+    ]
+    for qid, r in rep["occupancy_queries"].items():
+        lines.append(
+            f"| `{qid}` | {r['scope']} | {r['per_policy']['free']['f1']} | "
+            f"{r['per_policy']['occupied']['f1']} | {r['unknown_stable']} | {', '.join(r['gt'])} |"
+        )
+    lines += ["", "## Baseline (tracking backend; box-only, NOT occupancy retrieval)", ""]
+    for qid, r in rep["baseline_queries"].items():
+        lines.append(f"- `{qid}` ({r['backend']}/{r['status']}): F1={r['f1']}, retrieved={r['retrieved']}, GT={r['gt']}")
+    lines += [
+        "",
+        "## Unknown-policy sensitivity",
+        "",
+        "Retrieval under unknown=free vs unknown=occupied. A query whose retrieved set changes is "
+        "unknown-SENSITIVE; under the IGNORED policy the flipping scenes are excluded as undetermined.",
+    ]
+    sensitive = [qid for qid, r in rep["occupancy_queries"].items() if not r["unknown_stable"]]
+    if sensitive:
+        for qid in sensitive:
+            und = rep["occupancy_queries"][qid]["per_policy"]["ignored"]["undetermined"]
+            lines.append(f"- `{qid}`: SENSITIVE -- undetermined under IGNORED: {und}")
+    else:
+        lines.append("- all occupancy queries stable across the unknown policies on these scenes.")
+    lines += [
+        "",
+        "## Result categories (do not conflate)",
+        "- unit / integration tests: `pytest` (instrument + predicates), see CI/local run.",
+        "- synthetic smoke (this file): constructed GT, not external.",
+        "- externally validated benchmark: NONE yet -- requires the M2 Occ3D-nuScenes adapter.",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def main() -> None:
-    queries = yaml.safe_load((_HERE / "queries.yaml").read_text())["queries"]
-    print(f"{len(SCENES)} synthetic scenes, {len(queries)} queries\n")
+    rep = build_report()
+    results = _HERE / "results"
+    results.mkdir(exist_ok=True)
+    (results / "results.json").write_text(json.dumps(rep, indent=2) + "\n")
+    (results / "summary.md").write_text(_render_md(rep))
 
-    for q in queries:
-        qid, predicate = q["id"], q["predicate"]
-        try:
-            retrieved = {s.name for s in SCENES if _scene_matches(s, predicate)}
-        except NameError as exc:
-            print(f"- {qid}: SKIP (v0 core lacks {exc})")
-            continue
-        except (SyntaxError, UnsafeExpression) as exc:
-            print(f"- {qid}: SKIP (not v0-evaluable: {exc})")
-            continue
-        truth = GROUND_TRUTH.get(qid)
-        if truth is None:
-            print(f"- {qid}: retrieved={sorted(retrieved)}  (no GT labeled in v0)")
-            continue
-        p, r, f1 = _prf1(retrieved, truth)
-        print(f"- {qid}: retrieved={sorted(retrieved)} GT={sorted(truth)} | P={p:.2f} R={r:.2f} F1={f1:.2f}")
-
-    n = len(queries)
-    n_refav = sum(1 for q in queries if q["refav_expressible"])
-    print(f"\nexpressibility coverage: occupancy {n}/{n}, RefAV {n_refav}/{n}")
+    print(f"occquery_v0 SYNTHETIC smoke -- {rep['n_scenes']} scenes, commit {rep['commit'][:8]}")
+    for qid, r in rep["occupancy_queries"].items():
+        free = r["per_policy"]["free"]
+        flag = "" if r["unknown_stable"] else "   [unknown-SENSITIVE]"
+        print(f"  [occ] {qid} ({r['scope']}): free F1={free['f1']} retrieved={free['retrieved']} GT={r['gt']}{flag}")
+    for qid, r in rep["baseline_queries"].items():
+        print(f"  [baseline:{r['backend']}] {qid}: F1={r['f1']} retrieved={r['retrieved']} GT={r['gt']}")
+    cov = rep["expressibility_coverage"]
+    print(f"  expressibility coverage: occupancy {cov['occupancy']}, RefAV {cov['refav']}")
+    print(f"  wrote {results / 'results.json'} and {results / 'summary.md'}")
 
 
 if __name__ == "__main__":

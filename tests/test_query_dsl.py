@@ -54,3 +54,11 @@ def test_rejects_non_whitelisted_syntax(expr):
 def test_syntax_error_propagates():
     with pytest.raises(SyntaxError):
         safe_eval("speed(scene, class='v')", _names())  # 'class' is a Python keyword
+
+
+def test_object_class_keyword_parses_and_evaluates():
+    # the fix for the reserved-word problem: object_class= is a valid identifier, so the
+    # tracking-baseline query parses and runs instead of raising SyntaxError
+    names = _names()
+    names["dist"] = lambda sc, t, object_class=None: 1.5
+    assert safe_eval("dist(scene, t, object_class='vehicle') < 2.0", names) is True

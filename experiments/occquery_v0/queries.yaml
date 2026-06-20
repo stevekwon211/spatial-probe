@@ -1,27 +1,53 @@
-# Hand-compiled NL -> predicate queries for occquery_v0.
-# `refav_expressible` records whether RefAV's 28 cuboid+velocity functions could express
-# the query at all (the expressivity-gap evidence). Expand to ~20 before M4.
+# Hand-compiled NL -> predicate queries for occquery_v0, validated by probe.query_spec.
+#
+# Fields (see probe/query_spec.py for the schema):
+#   backend:           occupancy | tracking   (tracking = the box-only baseline)
+#   status:            implemented | baseline_only
+#   scope:             any | all | transition
+#     any/all          -> `predicate` over (scene, t)
+#     transition       -> `before` then `after` within `within_frames`
+#   refav_expressible: whether RefAV's box-only function set can express the query at all
+#                      (the expressivity-gap evidence; verified against the released 33-function
+#                      atomic_functions.py, which has no dense-occupancy / free-space primitive).
+#
+# Predicate expressions are evaluated by probe.query_dsl.safe_eval (AST whitelist), never eval().
+# Expand toward ~20 occupancy queries before M4.
 
 queries:
   - id: tight_clearance_at_speed
-    nl: "ego passed within 0.5 m of something while going faster than 30 km/h"
+    nl: "ego passed within 0.5 m of something solid while going faster than 30 km/h"
+    backend: occupancy
+    status: implemented
+    scope: any
     predicate: "lateral_clearance(scene, t) < 0.5 and ego_speed(scene, t) > 8.33"
-    refav_expressible: false   # clearance to nearest *occupied space* is not a box function
-    rationale: "obstacle may be a wall/debris/curb with no object box"
+    refav_expressible: false
+    rationale: "clearance to the nearest occupied space is not a box function; the obstacle may be a wall/debris/curb with no object box"
 
   - id: corridor_narrows_below_vehicle_width
     nl: "the only free path ahead narrowed to less than the car's width"
+    backend: occupancy
+    status: implemented
+    scope: any
     predicate: "min_free_width_along_path(scene, t, horizon=2.0) < ego_width(scene)"
     refav_expressible: false
-    rationale: "free-space width is a property of empty space, not of any object"
+    rationale: "free-space width is a property of empty space, not of any object box"
 
   - id: blocked_then_clears
-    nl: "the planned path was blocked then became free within 2 seconds"
-    predicate: "not free_along_ego_path(scene, t, 0.0) and free_along_ego_path(scene, t, 2.0)"
+    nl: "the planned path ahead was blocked, then became free within about 2 seconds"
+    backend: occupancy
+    status: implemented
+    scope: transition
+    before: "not free_along_ego_path(scene, t, horizon=1.0)"
+    after: "free_along_ego_path(scene, t, horizon=1.0)"
+    within_frames: 3
     refav_expressible: false
+    rationale: "a temporal free-path transition over the occupancy field; box tracks cannot express free-space"
 
-  - id: near_a_tracked_vehicle           # control: a query boxes CAN express
+  - id: near_a_tracked_vehicle
     nl: "ego came within 2 m of another vehicle"
-    predicate: "distance_to_nearest(scene, t, class='vehicle') < 2.0"
+    backend: tracking
+    status: baseline_only
+    scope: any
+    predicate: "distance_to_nearest_object(scene, t, object_class='vehicle') < 2.0"
     refav_expressible: true
-    rationale: "fairness control — both representations should answer this; box wins on ease"
+    rationale: "fairness control: both representations should answer this, and the box backend wins on ease; not part of the occupancy retrieval set"
