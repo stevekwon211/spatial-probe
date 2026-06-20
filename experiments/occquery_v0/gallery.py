@@ -29,7 +29,7 @@ MINI = [
 QUERIES = {
     "corridor": ("corridor_narrows_below_vehicle_width", "free corridor narrows below the car width (0 < width < ego width)"),
     "tight": ("tight_clearance_at_speed", "side gap < 0.5 m while faster than 30 km/h"),
-    "blocked": ("blocked_then_clears", "swept path blocked, then clear within 3 frames (temporal)"),
+    "blocked": ("free_path_is_blocked", "ego straight-ahead path blocked in some frame (static; temporal -> dynfield)"),
 }
 
 _HEAD = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
