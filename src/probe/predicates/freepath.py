@@ -79,5 +79,7 @@ def min_free_width_along_path(
         left = lat[lat > 0]
         right = lat[lat < 0]
         if left.size and right.size:
-            widths.append((float(left.min()) - half) + (-float(right.max()) - half))
+            left_extent = max(0.0, float(left.min()) - half)
+            right_extent = max(0.0, -float(right.max()) - half)
+            widths.append(left_extent + right_extent)
     return float(min(widths)) if widths else math.inf

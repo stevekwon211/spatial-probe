@@ -52,17 +52,22 @@ def lateral_clearance(
     lookahead: float = 20.0,
     unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
 ) -> float:
-    """Physical lateral free gap (m) between the ego body side and the nearest obstacle surface.
+    """Physical lateral free gap (m) to the nearest obstacle BESIDE the ego corridor.
 
-    = centerline_lateral_distance - ego_half_width - voxel_half_extent, floored at 0. A value of
-    0 means the ego footprint overlaps the obstacle (a collision, not a near miss). math.inf if
-    the corridor ahead is clear. The voxel half-extent approximates the obstacle surface as the
-    near face of its voxel cell.
+    Only obstacles outside the ego corridor (|lateral| beyond half-width + voxel-half) count; the
+    gap is |lateral| - half-width - voxel-half. An obstacle INSIDE the corridor (dead ahead) is a
+    longitudinal blockage that `free_along_ego_path` handles, not a lateral clearance, so it is
+    excluded here. math.inf if nothing is beside the corridor within `lookahead` ahead.
+
+    (Real-data finding 2026-06-20: measuring to the centerline counted dead-ahead obstacles as zero
+    clearance, so almost every city scene came back 0. A lateral clearance must be a SIDE gap.)
     """
-    d = centerline_lateral_distance(
-        grid, ego, lookahead=lookahead, unknown_policy=unknown_policy
-    )
-    if math.isinf(d):
+    centers = grid.obstacle_centers(unknown_policy=unknown_policy, max_height_agl=ego.height)
+    if len(centers) == 0:
         return math.inf
-    gap = d - ego.width / 2.0 - grid.voxel_size / 2.0
-    return max(0.0, gap)
+    forward, lateral = ego.to_ego_frame(centers[:, :2])
+    half = ego.width / 2.0 + grid.voxel_size / 2.0
+    beside = (forward >= 0.0) & (forward <= lookahead) & (np.abs(lateral) > half)
+    if not beside.any():
+        return math.inf
+    return float(np.min(np.abs(lateral[beside]) - half))

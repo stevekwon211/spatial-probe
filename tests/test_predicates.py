@@ -57,10 +57,12 @@ def test_lateral_clearance_is_physical_gap():
     assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == pytest.approx(3.0 - _OFFSET)
 
 
-def test_lateral_clearance_floors_at_zero_on_overlap():
+def test_lateral_clearance_ignores_dead_ahead_obstacle():
+    # an obstacle inside the corridor (dead ahead) is a longitudinal blockage, NOT a lateral
+    # clearance -> excluded here (free_along_ego_path handles it). Real-data fix 2026-06-20.
     occ = _empty()
-    occ[5, 0, 2] = OCCUPIED  # dead ahead, centerline distance 0 -> would be negative -> 0
-    assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == 0.0
+    occ[5, 0, 2] = OCCUPIED
+    assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == math.inf
 
 
 def test_lateral_clearance_empty_corridor_is_inf():
@@ -184,3 +186,12 @@ def test_min_free_width_one_sided_is_inf():
 
 def test_min_free_width_empty_is_inf():
     assert min_free_width_along_path(_grid(_empty()), _ego(), horizon=0.5) == math.inf
+
+
+def test_min_free_width_is_never_negative():
+    # obstacles straddling the centerline must not produce a negative width (real-data fix)
+    occ = _empty()
+    occ[24, 19, 2] = OCCUPIED
+    occ[24, 20, 2] = OCCUPIED
+    occ[24, 21, 2] = OCCUPIED
+    assert min_free_width_along_path(_grid(occ), _ego(), horizon=0.5) >= 0.0
