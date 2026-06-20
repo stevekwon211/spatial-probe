@@ -14,14 +14,18 @@ experiment's falsifiable protocol.
 
 ## Status
 
-Scaffold + plan only — under review (M0). No experiment logic implemented yet.
-First experiment: **`experiments/occquery_v0`** — occupancy-native physical-predicate
-retrieval (clearance / free-path) that object-box query languages cannot express.
+M1–M3 (the data-independent core) implemented and tested; M2 (Occ3D-nuScenes adapter) pending data.
+First experiment: **`experiments/occquery_v0`** — occupancy-native physical-predicate retrieval
+(clearance / free-path / free-width) that object-box query languages cannot express. The synthetic
+runner is a **smoke test, not a scientific result**; external success criteria (which public
+benchmarks, what counts as success) are in
+**[docs/benchmark-anchors.md](docs/benchmark-anchors.md)**.
 
 ## Layout
 
 - `src/probe/` — core instrument (DDA raycast, occupancy grid, predicates, metrics, adapters)
 - `experiments/occquery_v0/` — first falsifiable experiment
+- `docs/` — benchmark anchors & success criteria (`docs/benchmark-anchors.md`)
 - `tests/` — unit tests (TDD; core primitive first)
 - `data/` — datasets (gitignored; never committed)
 - `web/` — visualization / build-in-public site (Next.js + Tailwind, deployed on Vercel); reads experiment results

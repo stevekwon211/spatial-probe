@@ -34,6 +34,13 @@ The six-paper program this repo is meant to hold (do NOT build all at once):
 | dynamics/time | dynfield | which stored dynamics fields a planner actually needs, by regime |
 | valuation | value-of-correction | which label fixes actually move the model |
 
+Program order (by external-anchor strength; rationale + per-topic success criteria in
+[`docs/benchmark-anchors.md`](docs/benchmark-anchors.md)):
+**occquery → dynfield → value-of-correction → asof → gt-distrust → vis-calibration.** Only occquery
+rides a live third-party leaderboard (RefAV / EvalAI HOTA-Temporal); the other five define a new axis
+on a public substrate, so their bar is "public data + a measurable gap vs a public baseline + a
+released benchmark", not a leaderboard win.
+
 ---
 
 ## 1. Why OccQuery first (sequencing)
@@ -107,46 +114,74 @@ hand), a typed predicate "algebra", any UI, the other five experiments.
 
 ---
 
-## 4. The falsifiable protocol (the rigorous part)
+## 4. The falsifiable protocol (external-anchor version)
 
-**H1 — expressivity.** A set of safety-relevant spatial queries (tight clearance,
-blocked free-path, narrowing corridor) is expressible as occupancy predicates but
-*cannot* be expressed with a box-only function set (RefAV's 28 cuboid+velocity functions).
+Replaces a self-graded bar (denotation F1 > 0.9 vs our own oracle) with three layers, ordered by
+how hard they are to dispute: an oracle-free expressivity separation, a third-party-scored
+retrieval anchor, and a denotation check whose oracle is released so others can recompute it. The
+full per-topic matrix and verification status is in [`docs/benchmark-anchors.md`](docs/benchmark-anchors.md).
 
-**H2 — correctness.** Executing those predicates on occupancy retrieves a scene set that
-matches a hand-verified ground-truth set with high denotation F1 *on GT occupancy*, and
-the continuous predicate (clearance value) is accurate.
+**H1 — expressivity (oracle-free, the headline).** A set of N safety-relevant spatial queries
+(tight clearance, blocked free-path, narrowing corridor) is expressible as occupancy predicates but
+is *not* expressible in RefAV's released box-only function set (`refAV/atomic_functions.py`: cuboid
+translation/size/yaw + velocity + HD-map polygons; no dense-occupancy or free-space primitive).
+Checkable by anyone against the public source — no oracle. The strongest form is a
+non-identifiability witness: two scenes with identical box observables that differ only by unboxed
+occupancy; a box-only language MUST return the same answer, the occupancy predicate does not.
+Implemented as an executable test (`tests/test_expressivity.py`).
 
-**Predicates (v0).**
-- `lateral_clearance(scene, t)` — min horizontal distance from the ego lane corridor to
-  the nearest occupied, non-ground voxel at time `t`. Example query: *clearance < 0.5 m
-  while ego speed > 30 km/h.*
-- `free_along_ego_path(scene, t, horizon)` — boolean: does the ego's swept footprint over
-  `[t, t+horizon]` stay collision-free in the occupancy grid? Example query: *the only
-  free path narrows below vehicle width.*
+**H2 — retrieval competitiveness (third-party scored).** On the subset of our queries expressible
+in RefAV's language, the retrieval backbone is competitive on a leaderboard nobody controls:
+HOTA-Temporal >= 50 on the RefAV Argoverse 2 Scenario Mining test split (EvalAI, opened 2025-05-07;
+public SOTA ~53.12 SMc2f / 52.37 Gemini-2.5-Pro, verified 2026-06-20). PRE-REQ: confirm the
+challenge rules permit a deterministic-predicate-over-occupancy submission; otherwise report this as
+an offline reproduction of the public eval protocol on val, explicitly labeled (not a leaderboard
+placement).
 
-**Oracle.** GT occupancy (Occ3D) + GT ego pose + GT ego box → compute "true"
-clearance / free-space directly. **Main validity threat = `unobserved` voxels.** Define
-3 handling rules (treat unobserved as free / as occupied / as excluded) and **report
-denotation sensitivity across all three.** Stability across rules = the premise holds;
-instability = the premise is at risk.
+**H3 — denotation correctness (released oracle, secondary).** Run the predicates over a RELEASED
+third-party occupancy field (not one we produce) on Occ3D-nuScenes; report denotation P/R/F1 of the
+returned scene-frames against a LiDAR-derived geometric oracle, AND beat the best box-only RefAV
+approximation of the same query by >= 20 absolute F1. The RELATIVE gap is the load-bearing claim;
+absolute F1 (target >= 0.90) is an internal-validity check. (Occ3D occupancy SOTA is
+modality-dependent and currently PROVISIONAL: pin camera-only vs multi-modal before citing a
+substrate number.)
 
-**Baseline.** RefAV's 28 functions — demonstrate the spatial-geometry subset is
-*inexpressible* there (the expressivity gap), not just "scores worse."
+**Predicates (v0).** `lateral_clearance` (physical free gap, ego body side to obstacle surface),
+`free_along_ego_path`, and `min_free_width_along_path`. All carry an explicit `UnknownPolicy`
+(free / occupied / ignored).
 
-**Metrics.**
-- expressibility coverage: of N queries, # occupancy can express vs # RefAV can express.
-- denotation precision / recall / **F1** of the returned scene set vs hand-labeled GT.
-- clearance MAE + tolerance-accuracy ([75%,125%] of GT).
+**Oracle.** GT/LiDAR-derived clearance and free-space, reconstructed INDEPENDENTLY of the occupancy
+field under test (so field quality and oracle are not the same artifact). It is author-reconstructed,
+so we say so plainly and RELEASE the oracle-construction code + held-out scene IDs. Main validity
+threat = `unobserved` voxels: evaluate under all three `UnknownPolicy` rules and report denotation
+sensitivity; instability across the rules is the test failing, not a footnote.
 
-**Success (validates the angle):** clean expressivity separation (occupancy ≈ N, RefAV ≈
-0 on the spatial subset) AND denotation F1 > 0.9 on GT occupancy with low clearance MAE,
-stable across the 3 unobserved-voxel rules.
+**Baseline.** RefAV's released function set — demonstrate the spatial subset is *inexpressible* there
+(H1), and that the best box-only approximation loses to free-space predicates by >= 20 F1 (H3).
 
-**Kill / pivot:** even on GT occupancy, unobserved-voxel/boundary ambiguity makes the
-oracle so fuzzy that denotation flips across the 3 rules → predicate-on-Occ3D premise is
-shaky → shrink scope to dense-LiDAR free-space (accumulated sweeps) instead of Occ3D
-voxels, and re-test. (This is a real possible outcome and an acceptable, honest result.)
+**Metrics.** expressibility coverage (occupancy ~N vs RefAV ~0); HOTA-Temporal on the EvalAI subset;
+denotation P/R/F1 vs the released oracle; the >= 20-F1 gap vs box-only; clearance MAE +
+tolerance-accuracy ([75%,125%]). Every self-chosen threshold is pre-registered and reported as a full
+curve — a cutoff a reviewer can move is not a result.
+
+**Success (validates the angle):** (1) clean expressivity separation (occupancy ~N, RefAV ~0); AND
+(2) HOTA-Temporal >= 50 on the EvalAI test split (or a labeled offline protocol reproduction); AND
+(3) free-space predicates beat the best box-only approximation by >= 20 F1, with absolute F1 >= 0.90
+stable across the 3 unknown-voxel rules as a secondary check.
+
+**Kill / pivot:** if a box-only language matches our denotation quality (the >= 20-F1 gap collapses),
+free-space predicates add no retrieval power — the angle fails. If unobserved-voxel ambiguity flips
+denotation across the 3 rules even on a released field, shrink scope to dense-LiDAR free-space
+(accumulated sweeps) and re-test. (A real possible outcome and an acceptable, honest result.)
+
+**Prior art (scope the novelty precisely).** nuPlan and Waymo Open Motion already do
+predicate-over-OBJECT-TRACKS scenario mining; RefAV owns box scenario mining; Scenic owns typed geo
+predicates. The novel sliver is the occupancy/free-space SUBSTRATE + a released
+denotation-correctness benchmark — not "predicate retrieval" in general.
+
+**Synthetic results are not scientific results.** `experiments/occquery_v0` currently runs on
+hand-built scenes (F1 = 1.00 by construction); that is a smoke test of the loop, not evidence. Every
+number above requires the M2 Occ3D-nuScenes adapter and the released oracle.
 
 ---
 
