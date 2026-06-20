@@ -1,23 +1,39 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Doeon Kwon
-"""OccupancyGrid + EgoPose: the spatial substrate the predicates run on.
+"""OccupancyGrid + EgoPose + UnknownPolicy: the spatial substrate the predicates run on.
 
-An OccupancyGrid is a dense 3D voxel field (OCCUPIED / FREE / UNKNOWN) plus the
-world<->voxel calibration (voxel size + origin). EgoPose is the vehicle's pose at one
-instant. Both are deliberately minimal value objects: the dataset adapter (M2) fills them
-from Occ3D-nuScenes, and tests fill them synthetically. The occupancy encoding constants
-live with the primitive in `probe.raycast` and are re-exported here for convenience.
+An OccupancyGrid is a dense 3D voxel field (OCCUPIED / FREE / UNKNOWN) plus its world
+calibration (voxel size + origin). EgoPose is the vehicle pose at one instant. UnknownPolicy
+is how a predicate treats unobserved voxels -- the single most important validity knob for
+occupancy queries. The dataset adapter (M2) fills these from Occ3D-nuScenes; tests fill them
+synthetically. Occupancy encoding constants live with the primitive in `probe.raycast`.
 """
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 
 from probe.raycast import FREE, OCCUPIED, UNKNOWN, Cell
 
-__all__ = ["OccupancyGrid", "EgoPose", "FREE", "OCCUPIED", "UNKNOWN"]
+__all__ = ["OccupancyGrid", "EgoPose", "UnknownPolicy", "FREE", "OCCUPIED", "UNKNOWN"]
+
+
+class UnknownPolicy(Enum):
+    """How a predicate treats UNKNOWN (unobserved) voxels.
+
+    PLAN section 4 requires reporting denotation sensitivity across all three: the result of
+    an occupancy query can flip depending on whether the unseen is assumed solid or empty, and
+    that flip rate IS the validity test. An enum (not boolean flags) makes an invalid
+    combination unrepresentable.
+    """
+
+    OCCUPIED = "occupied"  # unknown blocks: conservative (assume the unseen is solid)
+    FREE = "free"          # unknown is passable: optimistic (assume the unseen is empty)
+    IGNORED = "ignored"    # value computed as FREE; the experiment layer drops any (scene,
+    #                        frame) whose verdict would flip under OCCUPIED as "undetermined".
 
 
 @dataclass(frozen=True, eq=False)
@@ -27,8 +43,8 @@ class OccupancyGrid:
     occupancy: (X, Y, Z) int array of OCCUPIED / FREE / UNKNOWN.
     voxel_size: meters per voxel edge.
     origin: world coordinate of the center of voxel (0, 0, 0).
-    ground_height: world z at/below which an OCCUPIED voxel is treated as ground (the
-        drivable surface) and excluded from "non-ground" obstacle queries.
+    ground_height: world z at/below which an OCCUPIED voxel is the road surface (excluded as a
+        non-ground obstacle).
     """
 
     occupancy: np.ndarray
@@ -50,28 +66,51 @@ class OccupancyGrid:
         x, y, z = o + np.asarray(cell, dtype=float) * self.voxel_size
         return float(x), float(y), float(z)
 
-    def nonground_occupied_centers(self) -> np.ndarray:
-        """World-space centers (M, 3) of every OCCUPIED voxel above `ground_height`.
+    def obstacle_centers(
+        self,
+        *,
+        unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
+        max_height_agl: float | None = None,
+    ) -> np.ndarray:
+        """World-space centers (M, 3) of obstacle voxels.
 
-        Ground voxels are excluded because clearance / free-path care about obstacles, not
-        the road surface. Vectorized: argwhere -> affine to world -> z filter.
+        An obstacle is an OCCUPIED voxel above `ground_height` -- plus UNKNOWN voxels when
+        `unknown_policy` is OCCUPIED (the conservative reading). `max_height_agl` (meters above
+        ground) caps the vertical band, excluding voxels above the querying vehicle's envelope
+        (e.g. a high overhang the ego passes safely under). Vectorized: argwhere -> world -> z
+        filter.
         """
-        idx = np.argwhere(self.occupancy == OCCUPIED)
+        occ = self.occupancy
+        if unknown_policy is UnknownPolicy.OCCUPIED:
+            mask = (occ == OCCUPIED) | (occ == UNKNOWN)
+        else:
+            mask = occ == OCCUPIED
+        idx = np.argwhere(mask)
         if idx.size == 0:
             return np.empty((0, 3), dtype=float)
         centers = np.asarray(self.origin, dtype=float) + idx * self.voxel_size
-        return centers[centers[:, 2] > self.ground_height]
+        z = centers[:, 2]
+        keep = z > self.ground_height
+        if max_height_agl is not None:
+            keep = keep & (z <= self.ground_height + max_height_agl)
+        return centers[keep]
 
 
 @dataclass(frozen=True)
 class EgoPose:
-    """The ego vehicle's pose at one instant. Heading is yaw in radians, 0 == +x, CCW."""
+    """The ego vehicle pose at one instant. Heading is yaw in radians, 0 == +x, CCW.
+
+    width / length / height are the vehicle's physical extents in meters (nuScenes ego is
+    ~1.85 x 4.6 x 1.9), used by the predicates to turn voxel-center geometry into a physical
+    free gap.
+    """
 
     position: tuple[float, float, float]
     heading: float
     speed: float = 0.0  # m/s
-    width: float = 1.85  # m   (nuScenes ego vehicle ~1.85 x 4.6)
-    length: float = 4.6  # m
+    width: float = 1.85
+    length: float = 4.6
+    height: float = 1.9
 
     @property
     def forward(self) -> tuple[float, float]:
