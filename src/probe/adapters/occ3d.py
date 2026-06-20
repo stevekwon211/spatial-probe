@@ -1,48 +1,113 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Doeon Kwon
-"""Occ3D-nuScenes -> probe.Scene adapter (M2). NOT YET IMPLEMENTED -- requires the dataset.
+"""Occ3D-nuScenes -> probe.Scene adapter (M2).
 
-This module is the CONTRACT for M2: the signature plus the label/coordinate mapping a real
-implementation must satisfy, so the data-independent core (predicates, retrieval, metrics) wires to
-real scenes by filling in `load_scene` and nothing else. Once it returns scenes,
-`experiments/occquery_v0/run.py` works unchanged with `SCENES` sourced from here.
+Loads occupancy scenes from the Occ3D-nuScenes release (annotations.json + gts/*/labels.npz) into
+the dataset-agnostic probe.Scene type, so the predicates / retrieval / metrics run on real data
+unchanged. The Occ3D voxel grid is EGO-CENTRIC, so the ego is the origin with heading 0 and only
+its speed comes from the world ego pose -- the predicates then reason in the same ego frame they
+were written for.
 
-The dataset is gated behind a free nuScenes research account + terms, so this file does NOT download
-anything. See docs/m2-adapter-contract.md for the expected layout, versions, integrity checks, the
-first real-data smoke command, and the output schema.
+Needs no nuScenes-devkit: ego pose, timestamps, and the occupancy path are all in annotations.json.
+Object boxes (for the tracking baseline) require nuScenes and are out of scope here -- objects=();
+the occupancy predicates do not use them. Grid spec verified 2026-06-20 against labels.npz.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 
-from probe.scene import Scene
+import numpy as np
 
-# Occ3D-nuScenes voxel-grid spec. PROVISIONAL -- confirm against the official Occ3D-nuScenes release
-# before implementing (commonly cited: 0.4 m voxels over [-40, 40] x [-40, 40] x [-1.0, 5.4] m ->
-# 200 x 200 x 16, one semantic label per voxel + a per-voxel camera/lidar visibility mask).
-OCC3D_VOXEL_SIZE_M = 0.4               # PROVISIONAL
-OCC3D_GRID_SHAPE = (200, 200, 16)      # PROVISIONAL
-OCC3D_RANGE_M = ((-40.0, 40.0), (-40.0, 40.0), (-1.0, 5.4))  # PROVISIONAL
-OCC3D_FREE_LABEL = 17                  # PROVISIONAL -- confirm the free/empty label id
+from probe.grid import FREE, OCCUPIED, UNKNOWN, EgoPose, OccupancyGrid
+from probe.scene import Frame, Scene
+
+# Occ3D-nuScenes voxel-grid spec (verified against labels.npz: semantics (200,200,16) uint8).
+VOXEL_SIZE = 0.4
+GRID_SHAPE = (200, 200, 16)
+RANGE = ((-40.0, 40.0), (-40.0, 40.0), (-1.0, 5.4))
+# world (= ego-frame) coordinate of the center of voxel (0, 0, 0)
+ORIGIN = (
+    RANGE[0][0] + VOXEL_SIZE / 2.0,
+    RANGE[1][0] + VOXEL_SIZE / 2.0,
+    RANGE[2][0] + VOXEL_SIZE / 2.0,
+)
+GROUND_HEIGHT = RANGE[2][0]  # -1.0; ground-surface classes are ALSO mapped to FREE below
+
+# Occ3D semantic class ids -> probe encoding.
+FREE_CLASS = 17
+GROUND_CLASSES = frozenset({11, 12, 13, 14})  # driveable_surface, other_flat, sidewalk, terrain
+# every other class (0-10 vehicles/ped/cone/barrier/others, 15 manmade, 16 vegetation) -> OCCUPIED
 
 
-def load_scene(scene_token: str, data_root: pathlib.Path) -> Scene:
-    """Load one nuScenes scene as a probe.Scene (one Frame per keyframe sample).
+def map_occupancy(semantics: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Map Occ3D (semantics, visibility mask) to a probe OCCUPIED / FREE / UNKNOWN grid.
 
-    Contract per frame (see docs/m2-adapter-contract.md):
-    - OccupancyGrid.occupancy: Occ3D voxel labels mapped to OCCUPIED / FREE / UNKNOWN, where
-      UNKNOWN = not observed per the visibility mask, FREE = the empty label, and any non-free,
-      non-ground class = OCCUPIED. Ground classes are handled via OccupancyGrid.ground_height, not
-      as obstacles.
-    - OccupancyGrid.voxel_size / origin / ground_height: from the Occ3D grid spec + the ego frame.
-    - EgoPose: position + yaw from the nuScenes ego pose; speed from consecutive sample timestamps.
-    - objects: tuple[TrackedBox] from nuScenes sample_annotation (center, size, yaw, category,
-      velocity).
-    - time: sample timestamp in seconds.
-
-    Raises NotImplementedError until M2; the dataset is gated and must be set up locally first.
+    free + ground-surface classes -> FREE; every other semantic class -> OCCUPIED; unobserved
+    voxels (mask == 0) -> UNKNOWN. The UNKNOWN voxels are what make the 3-policy unknown-sensitivity
+    report (PLAN section 4) reflect real sensor coverage rather than a synthetic choice.
     """
-    raise NotImplementedError(
-        "M2 adapter requires Occ3D-nuScenes data (gated behind a nuScenes account + terms). "
-        "See docs/m2-adapter-contract.md for setup and the output schema."
-    )
+    occ = np.full(semantics.shape, OCCUPIED, dtype=int)
+    occ[semantics == FREE_CLASS] = FREE
+    for c in GROUND_CLASSES:
+        occ[semantics == c] = FREE
+    occ[mask == 0] = UNKNOWN
+    return occ
+
+
+def _ordered_tokens(scene_infos: dict) -> list[str]:
+    """Frame tokens in temporal order via the prev/next linked list (fallback: dict order)."""
+    head = None
+    for tok, fr in scene_infos.items():
+        if fr.get("prev") in (None, "", "EOF"):
+            head = tok
+            break
+    if head is None:
+        return list(scene_infos)
+    order: list[str] = []
+    tok: str | None = head
+    seen: set[str] = set()
+    while tok and tok not in seen and tok in scene_infos:
+        order.append(tok)
+        seen.add(tok)
+        nxt = scene_infos[tok].get("next")
+        tok = nxt if nxt not in (None, "", "EOF") else None
+    return order or list(scene_infos)
+
+
+def _speed(scene_infos: dict, tokens: list[str], i: int) -> float:
+    """Ego speed (m/s) from consecutive world ego translations and timestamps."""
+    if len(tokens) < 2:
+        return 0.0
+    j = i + 1 if i + 1 < len(tokens) else i - 1
+    a, b = scene_infos[tokens[i]], scene_infos[tokens[j]]
+    pa = np.asarray(a["ego_pose"]["translation"][:2], dtype=float)
+    pb = np.asarray(b["ego_pose"]["translation"][:2], dtype=float)
+    dt = abs(b["timestamp"] - a["timestamp"]) / 1e6
+    return float(np.linalg.norm(pb - pa) / dt) if dt > 0 else 0.0
+
+
+def load_scene(scene_name: str, data_root: pathlib.Path | str, *, mask: str = "lidar") -> Scene:
+    """Load one Occ3D-nuScenes scene as a probe.Scene (ego-centric occupancy, one Frame per sample).
+
+    `data_root` must contain `annotations.json` and `gts/`. `mask` selects the visibility mask
+    ('lidar' or 'camera') used to mark UNKNOWN voxels. Frames are returned in temporal order;
+    objects=() because boxes require nuScenes and the occupancy predicates do not use them.
+    """
+    root = pathlib.Path(data_root)
+    annotations = json.loads((root / "annotations.json").read_text())
+    scene_infos = annotations["scene_infos"]
+    if scene_name not in scene_infos:
+        raise KeyError(f"{scene_name!r} not in annotations ({len(scene_infos)} scenes available)")
+    si = scene_infos[scene_name]
+    tokens = _ordered_tokens(si)
+    mask_key = "mask_lidar" if mask == "lidar" else "mask_camera"
+    frames: list[Frame] = []
+    for i, tok in enumerate(tokens):
+        fr = si[tok]
+        labels = np.load(root / fr["gt_path"])
+        occupancy = map_occupancy(labels["semantics"], labels[mask_key])
+        grid = OccupancyGrid(occupancy, VOXEL_SIZE, ORIGIN, GROUND_HEIGHT)
+        ego = EgoPose((0.0, 0.0, 0.0), 0.0, speed=_speed(si, tokens, i))
+        frames.append(Frame(grid, ego, time=fr["timestamp"] / 1e6))
+    return Scene(tuple(frames), scene_name)
