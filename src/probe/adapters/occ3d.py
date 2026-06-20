@@ -40,18 +40,27 @@ GROUND_CLASSES = frozenset({11, 12, 13, 14})  # driveable_surface, other_flat, s
 # every other class (0-10 vehicles/ped/cone/barrier/others, 15 manmade, 16 vegetation) -> OCCUPIED
 
 
-def map_occupancy(semantics: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """Map Occ3D (semantics, visibility mask) to a probe OCCUPIED / FREE / UNKNOWN grid.
+def map_occupancy(semantics: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
+    """Map Occ3D (semantics, optional visibility mask) to a probe OCCUPIED / FREE / UNKNOWN grid.
 
-    free + ground-surface classes -> FREE; every other semantic class -> OCCUPIED; unobserved
-    voxels (mask == 0) -> UNKNOWN. The UNKNOWN voxels are what make the 3-policy unknown-sensitivity
-    report (PLAN section 4) reflect real sensor coverage rather than a synthetic choice.
+    free + ground-surface classes -> FREE; every other semantic class -> OCCUPIED.
+
+    `mask=None` returns the DENSE accumulated GT (the H3 denotation oracle): the Occ3D semantics are
+    a multi-sweep accumulated label, so they are nearly fully observed. This is what the occupancy
+    predicates should run on.
+
+    Passing a per-frame visibility mask marks unobserved voxels (mask == 0) as UNKNOWN -- the
+    single-frame OBSERVED view (~88% unknown on one lidar sweep). That view is the conditioning
+    variable for gt-distrust / vis-calibration and for a predicted-occupancy robustness arm (v1); it
+    is NOT the occquery oracle, because masking the dense GT makes the denotation depend almost
+    entirely on the unknown policy.
     """
     occ = np.full(semantics.shape, OCCUPIED, dtype=int)
     occ[semantics == FREE_CLASS] = FREE
     for c in GROUND_CLASSES:
         occ[semantics == c] = FREE
-    occ[mask == 0] = UNKNOWN
+    if mask is not None:
+        occ[mask == 0] = UNKNOWN
     return occ
 
 
@@ -90,9 +99,11 @@ def _speed(scene_infos: dict, tokens: list[str], i: int) -> float:
 def load_scene(scene_name: str, data_root: pathlib.Path | str, *, mask: str = "lidar") -> Scene:
     """Load one Occ3D-nuScenes scene as a probe.Scene (ego-centric occupancy, one Frame per sample).
 
-    `data_root` must contain `annotations.json` and `gts/`. `mask` selects the visibility mask
-    ('lidar' or 'camera') used to mark UNKNOWN voxels. Frames are returned in temporal order;
-    objects=() because boxes require nuScenes and the occupancy predicates do not use them.
+    `data_root` must contain `annotations.json` and `gts/`. `mask` is 'none' (dense accumulated GT,
+    the occquery H3 oracle -- recommended), or 'lidar' / 'camera' (mark unobserved voxels UNKNOWN,
+    the single-frame observed view used by gt-distrust / vis-calibration). Frames are returned in
+    temporal order; objects=() because boxes require nuScenes and the occupancy predicates do not
+    use them.
     """
     root = pathlib.Path(data_root)
     annotations = json.loads((root / "annotations.json").read_text())
@@ -101,12 +112,13 @@ def load_scene(scene_name: str, data_root: pathlib.Path | str, *, mask: str = "l
         raise KeyError(f"{scene_name!r} not in annotations ({len(scene_infos)} scenes available)")
     si = scene_infos[scene_name]
     tokens = _ordered_tokens(si)
+    use_mask = mask in ("lidar", "camera")
     mask_key = "mask_lidar" if mask == "lidar" else "mask_camera"
     frames: list[Frame] = []
     for i, tok in enumerate(tokens):
         fr = si[tok]
         labels = np.load(root / fr["gt_path"])
-        occupancy = map_occupancy(labels["semantics"], labels[mask_key])
+        occupancy = map_occupancy(labels["semantics"], labels[mask_key] if use_mask else None)
         grid = OccupancyGrid(occupancy, VOXEL_SIZE, ORIGIN, GROUND_HEIGHT)
         ego = EgoPose((0.0, 0.0, 0.0), 0.0, speed=_speed(si, tokens, i))
         frames.append(Frame(grid, ego, time=fr["timestamp"] / 1e6))
