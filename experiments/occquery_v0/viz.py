@@ -77,20 +77,40 @@ def render(scene, t, out_path: pathlib.Path) -> None:
     plt.close(fig)
 
 
-def main() -> None:
-    out = _HERE / "results" / "viz"
+def _pick_frame(scene, query: str) -> int:
+    """The most query-relevant frame to render for hand-labeling."""
+    ts = scene.times()
+    if query == "corridor":  # narrowest frame that actually MATCHES 0 < width < ego_width
+        ego_w = scene.ego_width()
+        cand = [(min_free_width_along_path(scene.grid_at(t), scene.ego_at(t), 2.0), t) for t in ts]
+        matching = [(w, t) for w, t in cand if 0.0 < w < ego_w]
+        return min(matching)[1] if matching else min(cand)[1]
+    if query == "blocked":  # the first frame the swept path is blocked (start of a transition)
+        for t in ts:
+            if not free_along_ego_path(scene.grid_at(t), scene.ego_at(t), 1.0):
+                return t
+        return 0
+    if query == "tight":  # smallest side clearance among above-threshold-speed frames
+        fast = [(lateral_clearance(scene.grid_at(t), scene.ego_at(t)), t) for t in ts if scene.ego_speed(t) > 8.33]
+        pool = fast or [(lateral_clearance(scene.grid_at(t), scene.ego_at(t)), t) for t in ts]
+        return min(pool)[1]
+    return min((lateral_clearance(scene.grid_at(t), scene.ego_at(t)), t) for t in ts)[1]
+
+
+def main(query: str = "corridor") -> None:
+    out = _HERE / "results" / "viz" / query
     out.mkdir(parents=True, exist_ok=True)
     for name in MINI:
         scene = load_scene(name, _DATA, mask="none")
-        best_t, best_cl = 0, float("inf")
-        for t in scene.times():
-            cl = lateral_clearance(scene.grid_at(t), scene.ego_at(t))
-            if cl < best_cl:
-                best_cl, best_t = cl, t
-        render(scene, best_t, out / f"{name}.png")
-        cl_s = "inf" if best_cl == float("inf") else f"{best_cl:.2f}m"
-        print(f"{name}: min-clearance frame {best_t}, clearance {cl_s}, speed {scene.ego_speed(best_t):.1f} m/s")
+        t = _pick_frame(scene, query)
+        render(scene, t, out / f"{name}.png")
+        g, ego = scene.grid_at(t), scene.ego_at(t)
+        w = min_free_width_along_path(g, ego, 2.0)
+        cl = lateral_clearance(g, ego)
+        ws = "inf" if w == float("inf") else f"{w:.2f}m"
+        cls = "inf" if cl == float("inf") else f"{cl:.2f}m"
+        print(f"{name}: frame {t}/{len(scene) - 1} | min_free_width {ws} | side_clearance {cls} | speed {ego.speed:.1f} m/s")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "corridor")

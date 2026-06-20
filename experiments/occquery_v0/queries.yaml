@@ -28,7 +28,7 @@ queries:
     backend: occupancy
     status: implemented
     scope: any
-    predicate: "min_free_width_along_path(scene, t, horizon=2.0) < ego_width(scene)"
+    predicate: "0 < min_free_width_along_path(scene, t, horizon=2.0) < ego_width(scene)"
     refav_expressible: false
     rationale: "free-space width is a property of empty space, not of any object box"
 

@@ -82,4 +82,9 @@ def min_free_width_along_path(
             left_extent = max(0.0, float(left.min()) - half)
             right_extent = max(0.0, -float(right.max()) - half)
             widths.append(left_extent + right_extent)
-    return float(min(widths)) if widths else math.inf
+    if not widths:
+        return math.inf
+    narrowest = min(widths)
+    # a gap narrower than one voxel is unresolvable -> treat as 0 (blocked), not a hairline
+    # corridor; this also removes float-residual gaps (~1e-15) that would read as an open sliver.
+    return 0.0 if narrowest < grid.voxel_size else float(narrowest)
