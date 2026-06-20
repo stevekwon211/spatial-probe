@@ -2,8 +2,7 @@
 
 **Result class: SYNTHETIC-SMOKE.** Hand-built scenes with constructed ground truth. Verifies the retrieval loop and predicate behavior on known geometry; NOT an externally validated scientific result. External numbers require the M2 nuScenes/Occ3D adapter.
 
-- commit: `6c71096a032bcfd8bceb424482053a1331c3d3e7`
-- seed: 0
+- seed: 0  (full commit hash + per-policy FP/FN are in results.json, gitignored)
 - scenes (7): tight_pass, slow_near, open_road, narrowing_corridor, blocked_then_clears, unknown_side, near_vehicle
 - expressibility coverage: occupancy 4/4, RefAV 1/4
 

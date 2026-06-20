@@ -119,8 +119,7 @@ def _render_md(rep: dict) -> str:
         "",
         f"**Result class: {rep['result_class'].upper()}.** {rep['disclaimer']}",
         "",
-        f"- commit: `{rep['commit']}`",
-        f"- seed: {rep['seed']}",
+        f"- seed: {rep['seed']}  (full commit hash + per-policy FP/FN are in results.json, gitignored)",
         f"- scenes ({rep['n_scenes']}): {', '.join(rep['scenes'])}",
         f"- expressibility coverage: occupancy {rep['expressibility_coverage']['occupancy']}, "
         f"RefAV {rep['expressibility_coverage']['refav']}",
