@@ -57,6 +57,32 @@ construction; on real city occupancy they collapse together.
 connected-free-region predicates (a reachable-free-space test, not a centerline scan) to be
 trustworthy. That is real v1 research, not a tweak — recorded here rather than papered over.
 
+## v0 retrieval audit (30-agent, 2026-06-20): precision 0/5
+
+A 30-agent ultracode audit (one agent per query x scene, each running the predicate AND reading the
+rendered viz image; viz axes independently verified -- known-position obstacles render correctly, and
+Occ3D `semantics` is [X,Y,Z] = forward/left/up per the official convention + the road-surface
+distribution) found: of 30 (query, scene) evaluations, v0 retrieved 5 scenes (corridor 1, tight 1,
+blocked 3) and **all 5 are false positives -- 0 true positives, precision 0/5**. The 25 non-retrievals
+are correct true-negatives, but several survive only by the speed gate or the floor-to-0 rule, not by
+the metric discriminating. So the predicate has no demonstrated ability to surface a real positive,
+and a 100% false-positive rate on everything it surfaced.
+
+Five failure modes, all root-level (not per-scene):
+1. **frontal-object-as-corridor** -- `min_free_width` pairs nearest-left vs nearest-right voxel at one
+   station with no connectivity test; one frontal clump edge + a stray cell read as a two-sided narrows.
+2. **frontal-edge-as-side-clearance** -- `lateral_clearance` takes the min over the whole 0-20 m forward
+   window, so a wall far ahead (where the road bends) reads as a gap beside the ego.
+3. **single-voxel-noise-as-blocked** -- no minimum cluster size; one isolated voxel (no neighbor within
+   1.2 m) trips "blocked".
+4. **single-frame-artifact-as-blocked** -- no temporal persistence; a 1-frame occupancy artifact
+   satisfies blocked -> clears.
+5. **ego-drives-past-static-point-as-clears** -- "clears" is satisfied by the ego driving past a STATIC
+   voxel (closing speed == ego speed), mistaken for an obstacle pulling away.
+
+Honest v0 claim: "correctly stays silent on scenes with no such situation, but every time it speaks it
+is wrong." It is NOT a working retriever; do not quote any accuracy implying it works.
+
 ## What this is NOT
 
 - Not a denotation P/R/F1: the GT shares the predicate's data source, so agreement is not external
@@ -64,9 +90,21 @@ trustworthy. That is real v1 research, not a tweak — recorded here rather than
 - `tight_clearance` precision (0.5 m) is below reliable visual labeling on a 0.4 m voxel grid; its
   denotation MAE needs an independent metric oracle — v1.
 
-## Next (v1)
+## Next (v1) -- root-cause fixes (no band-aid: make the wrong reading unrepresentable)
 
-- Independent raw-LiDAR clearance/free-space oracle → denotation MAE + P/R/F1, released with code +
-  held-out scene IDs.
-- Frame-pair / trajectory viz to verify `blocked_then_clears` transitions.
-- Expand from mini (10 scenes) to nuScenes val for real numbers.
+1. **Connected-free-region / path-aware geometry** -- replace nearest-left/right voxel pairing with a
+   free-space connectivity test: flood-fill the drivable free region from the ego footprint and measure
+   the narrowest gate of the connected channel. A corridor exists only if both walls bound the SAME
+   connected channel the ego is in -- structurally kills frontal-object-as-corridor and
+   frontal-edge-as-side-clearance.
+2. **Noise-robust occupancy** -- require a minimum cluster size / neighbor density before voxels count
+   as an obstacle (a lone voxel with no neighbor must not block).
+3. **Multi-frame persistence + true relative motion** -- blocked must persist >= 2 frames; clears must
+   require the obstacle to actually move out of the path (track it; relative speed != ego speed), not
+   merely fall out of the reach corridor because the ego drove forward past a static point.
+4. **Restrict `lateral_clearance` to obstacles abeam the ego** (small |forward|), separating a side
+   pass from a frontal blockage.
+5. **A labeled set that CONTAINS positives** (these 10 mini scenes have none) so recall is measurable;
+   add the five failure modes above as adversarial negatives in the regression suite.
+6. Independent raw-LiDAR clearance/free-space oracle -> denotation MAE + P/R/F1, released with code +
+   held-out scene IDs; expand from mini to nuScenes val.
