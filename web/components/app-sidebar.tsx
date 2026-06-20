@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Boxes, LayoutDashboard, Play } from "lucide-react";
 
 import { PIPELINE, SHIPPED, TOTAL } from "@/lib/pipeline";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar() {
+  const pathname = usePathname();
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -44,7 +46,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive tooltip="Overview" render={<Link href="/" />}>
+              <SidebarMenuButton isActive={pathname === "/"} tooltip="Overview" render={<Link href="/" />}>
                 <LayoutDashboard />
                 <span>Overview</span>
               </SidebarMenuButton>
@@ -60,10 +62,17 @@ export function AppSidebar() {
             <SidebarMenu>
               {stage.modules.map((m) => (
                 <SidebarMenuItem key={m.id}>
-                  <SidebarMenuButton tooltip={m.title}>
-                    <stage.icon />
-                    <span>{m.title}</span>
-                  </SidebarMenuButton>
+                  {m.href ? (
+                    <SidebarMenuButton tooltip={m.oneLine} isActive={pathname === m.href} render={<Link href={m.href} />}>
+                      <stage.icon />
+                      <span>{m.title}</span>
+                    </SidebarMenuButton>
+                  ) : (
+                    <SidebarMenuButton tooltip={`${m.title} · ${m.statusLabel}`} aria-disabled className="cursor-not-allowed opacity-50">
+                      <stage.icon />
+                      <span>{m.title}</span>
+                    </SidebarMenuButton>
+                  )}
                   <SidebarMenuBadge>
                     <span
                       className={

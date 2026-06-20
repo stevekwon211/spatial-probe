@@ -12,6 +12,7 @@ export interface ModuleItem {
   oneLine: string;
   status: Status;
   statusLabel: string;
+  href?: string; // set only when a page exists; otherwise the sidebar item is disabled
 }
 
 export interface Stage {
@@ -55,9 +56,10 @@ export const PIPELINE: Stage[] = [
         title: "OccQuery",
         axis: "geometry / occupancy",
         oneLine:
-          "Occupancy-native predicates (clearance, free-path) retrieve scenes that object-box query languages cannot express.",
+          "Occupancy-native predicates measure box-blind free-space geometry (clearance, free-width) that object-box query languages cannot express.",
         status: "in-progress",
-        statusLabel: "M1 · core primitive",
+        statusLabel: "static measurement + 3D viewer",
+        href: "/occquery",
       },
     ],
   },
