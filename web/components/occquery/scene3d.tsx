@@ -1,0 +1,155 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
+import {
+  Grid,
+  Line,
+  OrbitControls,
+  GizmoHelper,
+  GizmoViewport,
+  Stats,
+  OrthographicCamera,
+  PerspectiveCamera,
+} from "@react-three/drei";
+import * as THREE from "three";
+import { CAMERA_PRESETS, useViewer, type ColorMode } from "./store";
+
+export type Obstacle = [number, number, number]; // ego frame: forward, left, up
+
+type Ranges = { minU: number; maxU: number; maxF: number; maxL: number };
+
+function colorFor(mode: ColorMode, f: number, l: number, u: number, r: Ranges, c: THREE.Color) {
+  if (mode === "flat") return c.set("#3b82f6");
+  let t = 0;
+  if (mode === "height") t = (u - r.minU) / (r.maxU - r.minU + 1e-6);
+  else if (mode === "forward") t = Math.min(f, r.maxF) / (r.maxF + 1e-6);
+  else if (mode === "lateral") t = Math.abs(l) / (r.maxL + 1e-6);
+  else return c.set("#3b82f6"); // semantic/state not available yet -> flat
+  const clamped = Math.max(0, Math.min(1, t));
+  return c.setHSL(0.66 - 0.62 * clamped, 0.75, 0.55); // blue (low) -> red (high)
+}
+
+function Voxels({ obstacles, size }: { obstacles: Obstacle[]; size: number }) {
+  const ref = useRef<THREE.InstancedMesh>(null!);
+  const colorMode = useViewer((s) => s.colorMode);
+  const voxelScale = useViewer((s) => s.voxelScale);
+  const voxelOpacity = useViewer((s) => s.voxelOpacity);
+  const wireframe = useViewer((s) => s.wireframe);
+  const voxelShape = useViewer((s) => s.voxelShape);
+
+  useEffect(() => {
+    if (!ref.current || !obstacles.length) return;
+    const m = new THREE.Matrix4();
+    const c = new THREE.Color();
+    let minU = Infinity, maxU = -Infinity, maxF = 1, maxL = 1;
+    for (const [f, l, u] of obstacles) {
+      minU = Math.min(minU, u); maxU = Math.max(maxU, u);
+      maxF = Math.max(maxF, f); maxL = Math.max(maxL, Math.abs(l));
+    }
+    const r: Ranges = { minU, maxU, maxF, maxL };
+    for (let i = 0; i < obstacles.length; i++) {
+      const [f, l, u] = obstacles[i];
+      m.setPosition(f, u, l);
+      ref.current.setMatrixAt(i, m);
+      ref.current.setColorAt(i, colorFor(colorMode, f, l, u, r, c));
+    }
+    ref.current.instanceMatrix.needsUpdate = true;
+    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
+  }, [obstacles, colorMode]);
+
+  const s = size * voxelScale;
+  return (
+    <instancedMesh
+      key={`${obstacles.length}-${voxelShape}`}
+      ref={ref}
+      args={[undefined, undefined, Math.max(obstacles.length, 1)]}
+    >
+      {voxelShape === "sphere" ? (
+        <sphereGeometry args={[s * 0.6, 8, 8]} />
+      ) : (
+        <boxGeometry args={[s, s, s]} />
+      )}
+      <meshStandardMaterial transparent opacity={voxelOpacity} wireframe={wireframe} toneMapped={false} />
+    </instancedMesh>
+  );
+}
+
+function Ego({ w, l, h }: { w: number; l: number; h: number }) {
+  const egoOpacity = useViewer((s) => s.egoOpacity);
+  const wireframe = useViewer((s) => s.wireframe);
+  return (
+    <mesh position={[0, h / 2, 0]}>
+      <boxGeometry args={[l, h, w]} />
+      <meshStandardMaterial color="#ef4444" transparent opacity={egoOpacity} wireframe={wireframe} />
+    </mesh>
+  );
+}
+
+function CameraController() {
+  const { camera, controls } = useThree() as unknown as {
+    camera: THREE.Camera;
+    controls: { target: THREE.Vector3; update: () => void } | null;
+  };
+  const cam = useViewer((s) => s.cam);
+  useEffect(() => {
+    const p = CAMERA_PRESETS.find((x) => x.id === cam.preset);
+    if (!p) return;
+    camera.position.set(p.pos[0], p.pos[1], p.pos[2]);
+    if (controls) {
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cam.nonce]);
+  return null;
+}
+
+export function Scene3D({
+  obstacles,
+  ego,
+  voxelSize,
+  onGl,
+}: {
+  obstacles: Obstacle[];
+  ego: { width: number; length: number; height: number };
+  voxelSize: number;
+  onGl: (gl: THREE.WebGLRenderer) => void;
+}) {
+  const showVoxels = useViewer((s) => s.showVoxels);
+  const showEgo = useViewer((s) => s.showEgo);
+  const showForward = useViewer((s) => s.showForward);
+  const showGrid = useViewer((s) => s.showGrid);
+  const showGizmo = useViewer((s) => s.showGizmo);
+  const showStats = useViewer((s) => s.showStats);
+  const projection = useViewer((s) => s.projection);
+
+  return (
+    <Canvas gl={{ preserveDrawingBuffer: true }} onCreated={({ gl }) => onGl(gl)}>
+      {projection === "orthographic" ? (
+        <OrthographicCamera makeDefault position={[-14, 11, 13]} zoom={18} near={0.1} far={400} />
+      ) : (
+        <PerspectiveCamera makeDefault position={[-14, 11, 13]} fov={50} near={0.1} far={400} />
+      )}
+      <color attach="background" args={["#0a0a0a"]} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[10, 20, 10]} intensity={0.8} />
+      {showEgo && <Ego w={ego.width} l={ego.length} h={ego.height} />}
+      {showVoxels && <Voxels obstacles={obstacles} size={voxelSize} />}
+      {showForward && (
+        <Line points={[[0, 0.2, 0], [8, 0.2, 0]]} color="#ef4444" lineWidth={3} />
+      )}
+      {showGrid && (
+        <Grid args={[80, 80]} cellSize={2} sectionSize={10} infiniteGrid fadeDistance={60} cellColor="#222" sectionColor="#333" />
+      )}
+      {showGizmo && (
+        <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
+          <GizmoViewport axisColors={["#ef4444", "#22c55e", "#3b82f6"]} labelColor="#999" />
+        </GizmoHelper>
+      )}
+      {showStats && <Stats />}
+      <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
+      <CameraController />
+    </Canvas>
+  );
+}
