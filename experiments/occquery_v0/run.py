@@ -167,7 +167,8 @@ def main() -> None:
     results = _HERE / "results"
     results.mkdir(exist_ok=True)
     (results / "results.json").write_text(json.dumps(rep, indent=2) + "\n")
-    (results / "summary.md").write_text(_render_md(rep))
+    # synthetic smoke goes to smoke.md; the committed narrative is the hand-written summary.md
+    (results / "smoke.md").write_text(_render_md(rep))
 
     print(f"occquery_v0 SYNTHETIC smoke -- {rep['n_scenes']} scenes, commit {rep['commit'][:8]}")
     for qid, r in rep["occupancy_queries"].items():
@@ -178,7 +179,7 @@ def main() -> None:
         print(f"  [baseline:{r['backend']}] {qid}: F1={r['f1']} retrieved={r['retrieved']} GT={r['gt']}")
     cov = rep["expressibility_coverage"]
     print(f"  expressibility coverage: occupancy {cov['occupancy']}, RefAV {cov['refav']}")
-    print(f"  wrote {results / 'results.json'} and {results / 'summary.md'}")
+    print(f"  wrote {results / 'results.json'} and {results / 'smoke.md'}")
 
 
 if __name__ == "__main__":

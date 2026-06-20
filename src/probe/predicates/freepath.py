@@ -58,6 +58,7 @@ def min_free_width_along_path(
     horizon: float,
     *,
     unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
+    min_cluster_voxels: int = 1,
 ) -> float:
     """Minimum free corridor width (m) along the ego's straight-ahead path, v1 (C-space).
 
@@ -75,7 +76,9 @@ def min_free_width_along_path(
     positives on real data. (A single isolated-voxel 'wall' is a separate noise concern for the
     persistence layer, not here.)
     """
-    f = reachable_free_field(grid, ego, horizon, unknown_policy=unknown_policy)
+    f = reachable_free_field(
+        grid, ego, horizon, unknown_policy=unknown_policy, min_cluster_voxels=min_cluster_voxels
+    )
     res = f.resolution
     fi0, li0 = f.ego_cell
     reach = ego.length / 2.0 + ego.speed * horizon
@@ -83,8 +86,10 @@ def min_free_width_along_path(
     obst = f.obstacle
     widths: list[float] = []
     for fi in range(fi0, min(reach_fi, obst.shape[0] - 1) + 1):
-        if obst[fi, li0] or not f.reachable[fi, li0]:
-            break  # frontal blockage on the centerline -- stop walking the path
+        if obst[fi, li0]:
+            break  # a raw obstacle ON the centerline is a frontal blockage -- stop. An
+            # inflated-only narrowing (walls closer than the ego half-width) is NOT an obstacle on
+            # the centerline; it stays a corridor we keep measuring (that IS 'narrows below width').
         row = obst[fi]
         left = np.argwhere(row[li0 + 1:]).ravel()  # nearest obstacle left of the centerline
         right = np.argwhere(row[:li0]).ravel()      # nearest obstacle right of the centerline

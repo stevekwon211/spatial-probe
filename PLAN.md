@@ -121,6 +121,21 @@ how hard they are to dispute: an oracle-free expressivity separation, a third-pa
 retrieval anchor, and a denotation check whose oracle is released so others can recompute it. The
 full per-topic matrix and verification status is in [`docs/benchmark-anchors.md`](docs/benchmark-anchors.md).
 
+**Scope — occquery MEASURES, it does not judge danger (2026-06-21).** A predicate returns a static
+geometric FACT about one frame: free-width = 0.8 m, side gap = 0.27 m, path blocked = true. Whether
+that fact is a *dangerous* situation — a corridor the ego cannot pass vs a lead car it is following,
+a near-miss vs a car parked beside it — depends on relative motion over time, which is the
+**dynfield** experiment, not occquery. So occquery's success/kill is **measurement correctness**
+(H1 expressivity + H3 geometric accuracy), never danger-retrieval accuracy. The v0 queries
+(tight / corridor / blocked) were phrased as "danger scenes", which smuggled dynamics into a static
+instrument. They are re-read here as geometric measurements; the danger judgment is the job of
+occquery × dynfield. This is also why the v0 "0/5 precision" was a category error — a static
+measurement graded against a dynamic-danger answer key: scene-0061's 0.8 m free-width is a CORRECT
+measurement of the gap beside a lead car, and "that is a lead car, not a wall" is a dynfield verdict,
+not an occquery failure. (Resolution caveat: at 0.4 m voxels a sub-voxel gap, e.g. a 0.07 m
+parked-beside, cannot be told from contact; finer clearance needs raw-LiDAR re-voxelization, not a
+predicate change.)
+
 **H1 — expressivity (oracle-free, the headline).** A set of N safety-relevant spatial queries
 (tight clearance, blocked free-path, narrowing corridor) is expressible as occupancy predicates but
 is *not* expressible in RefAV's released box-only function set (`refAV/atomic_functions.py`: cuboid
@@ -140,8 +155,9 @@ placement).
 
 **H3 — denotation correctness (released oracle, secondary).** Run the predicates over a RELEASED
 third-party occupancy field (not one we produce) on Occ3D-nuScenes; report denotation P/R/F1 of the
-returned scene-frames against a LiDAR-derived geometric oracle, AND beat the best box-only RefAV
-approximation of the same query by >= 20 absolute F1. The RELATIVE gap is the load-bearing claim;
+geometric MEASUREMENTS (free-width / clearance / free-path values -- the accuracy of the MEASUREMENT
+per the Scope note above, not whether a scene is "dangerous") against a LiDAR-derived geometric
+oracle, AND beat the best box-only RefAV approximation of the same query by >= 20 absolute F1. The RELATIVE gap is the load-bearing claim;
 absolute F1 (target >= 0.90) is an internal-validity check. (Occ3D occupancy SOTA is
 modality-dependent and currently PROVISIONAL: pin camera-only vs multi-modal before citing a
 substrate number.)

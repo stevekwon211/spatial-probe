@@ -12,6 +12,14 @@
 #
 # Predicate expressions are evaluated by probe.query_dsl.safe_eval (AST whitelist), never eval().
 # Expand toward ~20 occupancy queries before M4.
+#
+# SCOPE (2026-06-21, PLAN s4): these are GEOMETRIC MEASUREMENTS over occupancy, NOT danger verdicts.
+# "tight_clearance_at_speed" returns frames where the side gap < 0.5 m AND the ego is fast -- both
+# static frame facts. Whether that is a dangerous near-miss (vs a wall the ego safely clears, vs a
+# lead car) needs relative motion over time = the dynfield experiment, not occquery. occquery is
+# judged on MEASUREMENT accuracy (does free-width / clearance match a geometric oracle), never on
+# retrieving "danger". The query names below read as situations for readability, but each is just a
+# threshold on a measured quantity.
 
 queries:
   - id: tight_clearance_at_speed

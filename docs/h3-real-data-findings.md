@@ -185,3 +185,30 @@ Final disposition of the five v0 false-positive modes:
 occquery is now static free-space, PLAN s0-aligned (premature-core avoided). 75 tests green;
 single-voxel noise verified gone on real Occ3D mini; scene-0103 image-verified as a real
 single-frame clump, not a stray voxel.
+
+## occquery measures, it does not judge danger (2026-06-21) -- the corridor "FP" is a lead car
+
+Walking scene-0061 frame-by-frame in the 3D viewer (`web/`) reframed the whole "0/5 precision"
+result. The "corridor FP" is a LEAD VEHICLE: across f14-34 the ego travels 36 m while the thing ahead
+stays 7-8 m away (it moves WITH the ego), and the ego decelerates 5.1 -> 2.2 m/s following it. So
+scene-0061's 0.80 m free-width is a CORRECT static measurement of the gap beside a lead car -- not a
+wrong reading. Calling it a "false-positive corridor" applied a DYNAMIC danger answer key ("is this a
+passable corridor?") to a STATIC measurement instrument -- a category error.
+
+**Re-definition (now PLAN s4 Scope):** occquery MEASURES box-blind static geometry (free-width,
+clearance, free-path). Whether a measured situation is *dangerous* (lead car vs wall, near-miss vs
+parked) is relative motion over time = the **dynfield** experiment. occquery success = H1 expressivity
++ H3 geometric measurement accuracy, NOT danger-retrieval F1.
+
+This re-reads the earlier sections of this doc:
+- The "v0 retrieval audit: precision 0/5" graded a static instrument against a dynamic answer key.
+  The five "false-positive modes" are real *geometry* the predicate reports; labeling them false
+  positives assumed a danger verdict occquery cannot make.
+- The cluster-size threshold (mc=5) explored for scene-0061 is the WRONG fix and is dropped -- a lead
+  car is a large real cluster, not noise. Dropping single isolated voxels stays valid; distinguishing
+  a lead car is dynfield's job.
+- Resolution bound: at 0.4 m voxels a sub-voxel gap (scene-0757's 0.07 m car parked beside) cannot be
+  told from contact -- obstacle voxels fall inside the ego footprint. Sub-0.4 m clearance needs a
+  finer field (raw-LiDAR re-voxelization), not a predicate change. (Separately, `lateral_clearance`'s
+  voxel-half guard reported 0.27 m there while the true nearest was 0.07 m -- it under-reports
+  near-contact, a real fix to make.)

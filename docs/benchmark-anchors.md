@@ -71,6 +71,13 @@ is stub-or-unverified.
 occupancy field retrieve logged driving scenes that a box-only query language cannot express, and
 they do so denotation-correctly.
 
+**Scope (2026-06-21, PLAN s4).** occquery MEASURES box-blind static geometry (free-width, clearance,
+free-path); it does NOT judge whether a measured situation is *dangerous* (a corridor the ego cannot
+pass vs a lead car it follows, a near-miss vs a car parked beside it) — that requires relative motion
+over time and is the **dynfield** topic. So the success below is **measurement accuracy + expressivity**,
+never danger-retrieval F1. (A 0.8 m free-width beside a lead car is a CORRECT measurement, not a false
+positive; "it's a lead car, not a wall" is a dynfield verdict.)
+
 - **Public dataset / substrate.** Argoverse 2 Sensor (RefAV scenario mining); Occ3D-nuScenes
   (occupancy substrate for the denotation arm).
 - **Public baseline.** RefAV's released function set (`refAV/atomic_functions.py`, ~33 cuboid +

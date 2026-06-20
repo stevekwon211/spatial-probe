@@ -231,3 +231,15 @@ def test_min_free_width_far_wall_is_not_a_corridor():
     occ = _empty()
     occ[30, 15:26, 2] = OCCUPIED  # wall at forward 10 covering the centerline
     assert min_free_width_along_path(_grid(occ), _ego(), horizon=2.0) == math.inf
+
+
+def test_min_free_width_narrowing_below_ego_is_a_corridor():
+    # the corridor POSITIVE (was missing): walls 1 m each side -> free width ~1 m < ego 1.85 m. The
+    # ego cannot pass, but it IS a narrowing free corridor -- the walls inflate over the centerline
+    # yet there is no raw obstacle ON the centerline, so it must be measured, not dropped to inf.
+    occ = _empty()
+    for x in range(21, 30):
+        occ[x, 21, 2] = OCCUPIED  # wall at lateral +1
+        occ[x, 19, 2] = OCCUPIED  # wall at lateral -1
+    w = min_free_width_along_path(_grid(occ), _ego(), horizon=0.5)
+    assert 0.0 < w < 1.85  # below ego width -> matches corridor_narrows
