@@ -87,7 +87,8 @@ they do so denotation-correctly.
   holds as an executable test. 59 unit/integration tests green. *Not a scientific result.*
 - **Publishable.** On public Occ3D-nuScenes val: (a) expressivity separation — N safety queries
   expressible as occupancy predicates, ~0 in RefAV's released function set, checkable by anyone
-  against `atomic_functions.py` (oracle-free, the headline); (b) denotation P/R/F1 over a
+  against `atomic_functions.py` (**verified 2026-06-20: 0 free-space primitives in the 33-function
+  set**, see [expressivity-vs-refav.md](expressivity-vs-refav.md); oracle-free, the headline); (b) denotation P/R/F1 over a
   **released** occupancy field vs a LiDAR-derived oracle whose construction code + held-out scene
   IDs are released; (c) free-space predicates beat the best box-only approximation by **>= 20
   absolute F1** (the relative gap is load-bearing; absolute F1 is a secondary internal check),
