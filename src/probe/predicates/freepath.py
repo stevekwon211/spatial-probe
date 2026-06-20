@@ -17,6 +17,7 @@ import math
 import numpy as np
 
 from probe.grid import EgoPose, OccupancyGrid, UnknownPolicy
+from probe.predicates.reachable import reachable_free_field
 
 
 def free_along_ego_path(
@@ -51,40 +52,41 @@ def min_free_width_along_path(
     *,
     unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
 ) -> float:
-    """Minimum free corridor width (m) across longitudinal stations along the ego path.
+    """Minimum free corridor width (m) along the ego's straight-ahead path, v1 (C-space).
 
-    At each station s in [0, length/2 + speed*horizon] (stepped by one voxel), find the nearest
-    obstacle surface to the left and to the right of the centerline; free_width = left_extent +
-    right_extent, each measured centerline-to-inner-surface (voxel center minus a voxel
-    half-extent). Returns the minimum over stations where BOTH sides are bounded; math.inf if
-    the path is never laterally bounded on both sides (an open or one-sided edge does not define
-    a corridor that can 'narrow'). Ground and over-height voxels excluded.
+    Walks the centerline forward one voxel at a time. At each station the centerline cell must be
+    free AND reachable from the ego footprint; the first cell that is itself an obstacle or is
+    unreachable is a frontal blockage and stops the walk (nothing past it is a corridor the ego
+    drives THROUGH -- it is a thing to stop for or go around). Where the walk continues, the
+    width is the surface-to-surface gap between the nearest obstacle to the left and to the right
+    of the centerline. Returns the minimum over stations bounded on BOTH sides; math.inf if the
+    path is never two-sided (an open / one-sided edge is not a corridor that can 'narrow').
+    Sub-voxel gaps clamp to 0 (blocked).
+
+    This replaces the v0 version that paired the nearest left/right voxel at every station with no
+    reachability test -- the source of the frontal-object-as-corridor and far-wall false
+    positives on real data. (A single isolated-voxel 'wall' is a separate noise concern for the
+    persistence layer, not here.)
     """
-    centers = grid.obstacle_centers(unknown_policy=unknown_policy, max_height_agl=ego.height)
+    f = reachable_free_field(grid, ego, horizon, unknown_policy=unknown_policy)
+    res = f.resolution
+    fi0, li0 = f.ego_cell
     reach = ego.length / 2.0 + ego.speed * horizon
-    if len(centers) == 0:
-        return math.inf
-    forward, lateral = ego.to_ego_frame(centers[:, :2])
-    half = grid.voxel_size / 2.0
-    step = grid.voxel_size
+    reach_fi = int(round((reach - f.forward_min) / res))
+    obst = f.obstacle
     widths: list[float] = []
-    k = 0
-    while k * step <= reach + 1e-9:
-        s = k * step
-        k += 1
-        near = np.abs(forward - s) <= half
-        if not near.any():
-            continue
-        lat = lateral[near]
-        left = lat[lat > 0]
-        right = lat[lat < 0]
+    for fi in range(fi0, min(reach_fi, obst.shape[0] - 1) + 1):
+        if obst[fi, li0] or not f.reachable[fi, li0]:
+            break  # frontal blockage on the centerline -- stop walking the path
+        row = obst[fi]
+        left = np.argwhere(row[li0 + 1:]).ravel()  # nearest obstacle left of the centerline
+        right = np.argwhere(row[:li0]).ravel()      # nearest obstacle right of the centerline
         if left.size and right.size:
-            left_extent = max(0.0, float(left.min()) - half)
-            right_extent = max(0.0, -float(right.max()) - half)
-            widths.append(left_extent + right_extent)
+            left_li = li0 + 1 + int(left[0])
+            right_li = int(right[-1])
+            width = (left_li - right_li) * res - res  # surface-to-surface free gap
+            widths.append(max(0.0, width))
     if not widths:
         return math.inf
     narrowest = min(widths)
-    # a gap narrower than one voxel is unresolvable -> treat as 0 (blocked), not a hairline
-    # corridor; this also removes float-residual gaps (~1e-15) that would read as an open sliver.
-    return 0.0 if narrowest < grid.voxel_size else float(narrowest)
+    return 0.0 if narrowest < res else float(narrowest)

@@ -47,8 +47,8 @@ def _witness_pair() -> tuple[Scene, Scene]:
     occ_clear = _blank()
     occ_wall = _blank()
     lateral = ego.width / 2.0 + _VOXEL / 2.0 + 0.4  # an unboxed wall ~0.4 m off the ego body side
-    for fx in range(3, 9):
-        _occupy(occ_wall, 10.0 + fx, 10.0 + lateral)
+    for fx in (-2.0, -1.0, 0.0, 1.0, 2.0):  # ALONGSIDE the ego body (abeam) -- the side pass the
+        _occupy(occ_wall, 10.0 + fx, 10.0 + lateral)  # ego is making now, which lateral_clearance reads
     clear = Scene((Frame(_grid(occ_clear), ego, 0.0, objects=(box,)),), "witness_clear")
     wall = Scene((Frame(_grid(occ_wall), ego, 0.0, objects=(box,)),), "witness_unboxed_wall")
     return clear, wall

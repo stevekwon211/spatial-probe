@@ -108,3 +108,42 @@ is wrong." It is NOT a working retriever; do not quote any accuracy implying it 
    add the five failure modes above as adversarial negatives in the regression suite.
 6. Independent raw-LiDAR clearance/free-space oracle -> denotation MAE + P/R/F1, released with code +
    held-out scene IDs; expand from mini to nuScenes val.
+
+## v1 (i) C-space implemented (2026-06-20): 2 of 5 false-positive modes eliminated
+
+Item 1 above (connected-free-region) is now a reachability substrate,
+`src/probe/predicates/reachable.py`: obstacles are rasterized into an ego-frame BEV,
+Minkowski-inflated by the ego half-width, flood-filled 8-connected from the ego footprint, and
+distance-transformed. `min_free_width_along_path` and `lateral_clearance` are re-implemented on
+top of it; both signatures are unchanged, so retrieval / query_spec / the adapter are untouched.
+
+Root-cause, not per-symptom: the single shared defect -- nearest-voxel pairing with no
+reachability test -- is replaced, so the whole class is closed, not three scenes patched.
+
+- **`min_free_width_along_path`** walks the centerline forward and stops at the first cell that is
+  an obstacle or unreachable (a frontal blockage is not a corridor the ego drives THROUGH), then
+  measures the surface-to-surface gap between the nearest obstacle left and right. This kills
+  **frontal-object-as-corridor** and **far-wall**: a frontal clump inflates over the centerline,
+  the walk stops, no width is recorded.
+- **`lateral_clearance`** is now an abeam quantity (`|forward| <= ego.length/2`): the gap to the
+  nearest obstacle beside the ego BODY, not the min over a 0-20 m forward window. This kills
+  **frontal-edge-as-side-clearance**. The honest reading: "ego passed within X" is a per-instant
+  quantity, so a wall far ahead is a FUTURE abeam reading on a later frame, not the current one.
+
+Verified three ways (code + data + image, per the no-number-only rule):
+- **Synthetic TDD**: 72 tests green, including adversarial negatives for both modes.
+- **Real Occ3D mini retrieval**: corridor `{scene-0061} -> {}`, tight `{scene-1077} -> {}`. The
+  measured values flipped honestly -- 0061's "0.80 m corridor" reads 4.0-14.8 m (the real wide
+  road); 1077's "0.28 m side gap" reads 0.68-1.08 m abeam (matching the audit's "true side gap
+  is 1.08 m beside the ego").
+- **Image**: scene-0061 f25 rendered as a reachable field shows the "corridor" is a frontal clump
+  7-9.5 m dead ahead, the centerline blocked at 6.4 m, with wide free space to either side -- a
+  thing to drive around, not a narrowing corridor.
+
+H1 (expressivity vs RefAV) is preserved: the witness's unboxed wall is placed abeam (where a side
+clearance is read), so the box-blind separation still holds by construction.
+
+**Still v0, deferred to (ii) a Bayes occupancy-persistence layer:** the three `blocked`
+(`free_along_ego_path`) modes -- single-voxel-noise, single-frame-artifact, and
+ego-drives-past-static-as-clears -- are noise / temporal, not single-frame geometry. Real
+`blocked` retrieval is unchanged at `{0103, 0655, 1077}` (still false positives) until (ii).

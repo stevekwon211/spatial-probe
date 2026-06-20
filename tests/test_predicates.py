@@ -53,7 +53,7 @@ def test_centerline_distance_follows_heading():
 
 def test_lateral_clearance_is_physical_gap():
     occ = _empty()
-    occ[5, 3, 2] = OCCUPIED  # centerline distance 3.0 -> gap 3.0 - 1.425
+    occ[2, 3, 2] = OCCUPIED  # abeam (forward 2 <= length/2), centerline distance 3.0 -> gap 3.0 - 1.425
     assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == pytest.approx(3.0 - _OFFSET)
 
 
@@ -61,7 +61,7 @@ def test_lateral_clearance_ignores_dead_ahead_obstacle():
     # an obstacle inside the corridor (dead ahead) is a longitudinal blockage, NOT a lateral
     # clearance -> excluded here (free_along_ego_path handles it). Real-data fix 2026-06-20.
     occ = _empty()
-    occ[5, 0, 2] = OCCUPIED
+    occ[2, 0, 2] = OCCUPIED
     assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == math.inf
 
 
@@ -71,13 +71,13 @@ def test_lateral_clearance_empty_corridor_is_inf():
 
 def test_clearance_excludes_ground_voxels():
     occ = _empty()
-    occ[5, 1, 0] = OCCUPIED  # z=0 <= ground_height -> ground, ignored
+    occ[2, 1, 0] = OCCUPIED  # z=0 <= ground_height -> ground, ignored
     assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == math.inf
 
 
 def test_clearance_excludes_voxels_above_ego_height():
     occ = _empty()
-    occ[5, 1, 5] = OCCUPIED  # z=5 > ground(0.5)+ego.height(1.9)=2.4 -> overhead, ignored
+    occ[2, 1, 5] = OCCUPIED  # z=5 > ground(0.5)+ego.height(1.9)=2.4 -> overhead, ignored
     assert lateral_clearance(_grid(occ), EgoPose((0, 0, 0), 0.0)) == math.inf
 
 
@@ -89,7 +89,7 @@ def test_clearance_ignores_obstacles_behind_ego():
 
 def test_clearance_translation_invariant():
     occ = _empty()
-    occ[25, 23, 2] = OCCUPIED  # 5 m ahead, 3 m left of ego at (20, 20)
+    occ[22, 23, 2] = OCCUPIED  # 2 m ahead (abeam), 3 m left of ego at (20, 20)
     g1 = OccupancyGrid(occ, 1.0, (0.0, 0.0, 0.0), 0.5)
     g2 = OccupancyGrid(occ, 1.0, (100.0, 100.0, 0.0), 0.5)  # shift world origin
     e1 = EgoPose((20, 20, 0), 0.0)
@@ -97,11 +97,19 @@ def test_clearance_translation_invariant():
     assert lateral_clearance(g1, e1) == lateral_clearance(g2, e2)
 
 
+def test_lateral_clearance_far_frontal_edge_is_not_side_clearance():
+    # FP mode 'frontal-edge-as-side-clearance': a wall far ahead (forward 10) is not a side gap
+    # beside the ego. v0 took the min over forward 0-20 and reported it; v1 only looks abeam.
+    occ = _empty()
+    occ[30, 23, 2] = OCCUPIED  # forward 10, lateral 3 -- far ahead, not abeam
+    assert lateral_clearance(_grid(occ), EgoPose((20, 20, 0), 0.0)) == math.inf
+
+
 # --- unknown-voxel policy ---
 
 def test_unknown_policy_free_vs_occupied():
     occ = _empty()
-    occ[5, 3, 2] = UNKNOWN
+    occ[2, 3, 2] = UNKNOWN
     g = _grid(occ)
     ego = EgoPose((0, 0, 0), 0.0)
     assert lateral_clearance(g, ego, unknown_policy=UnknownPolicy.FREE) == math.inf
@@ -195,3 +203,22 @@ def test_min_free_width_is_never_negative():
     occ[24, 20, 2] = OCCUPIED
     occ[24, 21, 2] = OCCUPIED
     assert min_free_width_along_path(_grid(occ), _ego(), horizon=0.5) >= 0.0
+
+
+# --- v1 adversarial: the corridor false positives v0 produced on real Occ3D data ---
+
+def test_min_free_width_frontal_object_is_not_a_corridor():
+    # FP mode 'frontal-object-as-corridor': a clump straddling the centerline ahead is a frontal
+    # blockage, not a corridor the ego drives through. v0 read its left/right edge as a narrows;
+    # v1 stops the centerline walk at the blockage and returns inf.
+    occ = _empty()
+    occ[25:28, 19:22, 2] = OCCUPIED  # forward 5-7, lateral -1..+1, covers the centerline
+    assert min_free_width_along_path(_grid(occ), _ego(), horizon=2.0) == math.inf
+
+
+def test_min_free_width_far_wall_is_not_a_corridor():
+    # FP mode 'far-wall': a wall far ahead spanning the centerline blocks the straight path; it
+    # is a blockage, not a two-sided narrowing corridor.
+    occ = _empty()
+    occ[30, 15:26, 2] = OCCUPIED  # wall at forward 10 covering the centerline
+    assert min_free_width_along_path(_grid(occ), _ego(), horizon=2.0) == math.inf

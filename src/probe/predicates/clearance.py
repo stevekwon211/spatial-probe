@@ -49,25 +49,26 @@ def lateral_clearance(
     grid: OccupancyGrid,
     ego: EgoPose,
     *,
-    lookahead: float = 20.0,
     unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
 ) -> float:
-    """Physical lateral free gap (m) to the nearest obstacle BESIDE the ego corridor.
+    """Physical lateral free gap (m) to the nearest obstacle ABEAM the ego body, v1.
 
-    Only obstacles outside the ego corridor (|lateral| beyond half-width + voxel-half) count; the
-    gap is |lateral| - half-width - voxel-half. An obstacle INSIDE the corridor (dead ahead) is a
-    longitudinal blockage that `free_along_ego_path` handles, not a lateral clearance, so it is
-    excluded here. math.inf if nothing is beside the corridor within `lookahead` ahead.
+    Only obstacles beside the ego body -- |forward| <= ego.length/2 and |lateral| beyond the
+    half-width -- count; the gap is |lateral| - half-width - voxel-half. An obstacle dead ahead
+    (inside the corridor) is a longitudinal blockage that `free_along_ego_path` handles, and an
+    obstacle far ahead is not a side clearance at all. math.inf if nothing is abeam.
 
-    (Real-data finding 2026-06-20: measuring to the centerline counted dead-ahead obstacles as zero
-    clearance, so almost every city scene came back 0. A lateral clearance must be a SIDE gap.)
+    v1 restricts to the abeam band. v0 took the minimum side gap over the whole 0-20 m forward
+    window, so a wall far ahead where the road bends read as a gap beside the ego (the
+    'frontal-edge-as-side-clearance' false positive on real Occ3D data 2026-06-20).
     """
     centers = grid.obstacle_centers(unknown_policy=unknown_policy, max_height_agl=ego.height)
     if len(centers) == 0:
         return math.inf
     forward, lateral = ego.to_ego_frame(centers[:, :2])
     half = ego.width / 2.0 + grid.voxel_size / 2.0
-    beside = (forward >= 0.0) & (forward <= lookahead) & (np.abs(lateral) > half)
+    abeam = ego.length / 2.0
+    beside = (np.abs(forward) <= abeam) & (np.abs(lateral) > half)
     if not beside.any():
         return math.inf
     return float(np.min(np.abs(lateral[beside]) - half))
