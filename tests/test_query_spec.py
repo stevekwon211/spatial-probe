@@ -83,5 +83,6 @@ def test_repo_queries_file_is_valid():
     queries = load_queries(_REPO / "experiments" / "occquery_v0" / "queries.yaml")
     ids = [q.id for q in queries]
     assert "tight_clearance_at_speed" in ids
-    assert any(q.scope == "transition" for q in queries)
+    # occquery is static per PLAN s0; the temporal blocked->clears moved to the dynfield experiment
+    assert "free_path_is_blocked" in ids
     assert any(q.backend == "tracking" and q.status == "baseline_only" for q in queries)

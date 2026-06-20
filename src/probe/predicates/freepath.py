@@ -26,23 +26,30 @@ def free_along_ego_path(
     horizon: float,
     *,
     unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
+    min_cluster_voxels: int = 1,
 ) -> bool:
-    """True iff no obstacle lies in the ego swept footprint over `horizon` seconds.
+    """True iff the ego can move straight forward over `horizon` seconds without its body sweeping
+    through an obstacle, v1 (C-space reachability).
 
-    Footprint = forward in [0, length/2 + speed*horizon + voxel/2] and |lateral| <= width/2 +
-    voxel/2 -- the ego body plus a straight constant-velocity reach, padded by a voxel
-    half-extent so a voxel grazing the corridor edge counts as a hit. horizon=0 tests the body
-    alone (is it blocked right now); a larger horizon extends the corridor by speed*horizon
-    meters. Ground and over-height voxels are excluded via `obstacle_centers`.
+    The ego centerline must stay reachable from the ego footprint out to a constant-velocity
+    forward reach (length/2 + speed*horizon). Obstacles are inflated by the ego half-width, so a
+    clear centerline means the whole body clears -- equivalent to the v0 swept-box test, but on the
+    same reachability substrate as the corridor/clearance predicates. horizon=0 tests the body
+    alone. `min_cluster_voxels` > 1 drops lone-voxel noise (kills single-voxel-noise-as-blocked);
+    set it at the query layer for real data. Temporal persistence / relative motion are dynfield's
+    job, not this single-frame predicate.
     """
-    centers = grid.obstacle_centers(unknown_policy=unknown_policy, max_height_agl=ego.height)
-    if len(centers) == 0:
-        return True
-    forward, lateral = ego.to_ego_frame(centers[:, :2])
-    reach = ego.length / 2.0 + ego.speed * horizon + grid.voxel_size / 2.0
-    half_w = ego.width / 2.0 + grid.voxel_size / 2.0
-    hit = (forward >= 0.0) & (forward <= reach) & (np.abs(lateral) <= half_w)
-    return not bool(hit.any())
+    f = reachable_free_field(
+        grid, ego, horizon, unknown_policy=unknown_policy, min_cluster_voxels=min_cluster_voxels
+    )
+    res = f.resolution
+    fi0, li0 = f.ego_cell
+    reach = ego.length / 2.0 + ego.speed * horizon
+    reach_fi = int(round((reach - f.forward_min) / res))
+    for fi in range(fi0, min(reach_fi, f.obstacle.shape[0] - 1) + 1):
+        if f.obstacle[fi, li0] or not f.reachable[fi, li0]:
+            return False  # centerline blocked within reach
+    return True
 
 
 def min_free_width_along_path(

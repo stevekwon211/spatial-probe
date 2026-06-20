@@ -32,7 +32,7 @@ def namespace(scene: Scene, policy: UnknownPolicy) -> dict:
         "scene": scene,
         "lateral_clearance": lambda sc, t: lateral_clearance(sc.grid_at(t), sc.ego_at(t), unknown_policy=policy),
         "centerline_lateral_distance": lambda sc, t: centerline_lateral_distance(sc.grid_at(t), sc.ego_at(t), unknown_policy=policy),
-        "free_along_ego_path": lambda sc, t, horizon: free_along_ego_path(sc.grid_at(t), sc.ego_at(t), horizon, unknown_policy=policy),
+        "free_along_ego_path": lambda sc, t, horizon: free_along_ego_path(sc.grid_at(t), sc.ego_at(t), horizon, unknown_policy=policy, min_cluster_voxels=2),
         "min_free_width_along_path": lambda sc, t, horizon: min_free_width_along_path(sc.grid_at(t), sc.ego_at(t), horizon, unknown_policy=policy),
         "ego_speed": lambda sc, t: sc.ego_speed(t),
         "ego_width": lambda sc: sc.ego_width(),

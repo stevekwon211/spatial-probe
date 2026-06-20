@@ -143,7 +143,45 @@ Verified three ways (code + data + image, per the no-number-only rule):
 H1 (expressivity vs RefAV) is preserved: the witness's unboxed wall is placed abeam (where a side
 clearance is read), so the box-blind separation still holds by construction.
 
-**Still v0, deferred to (ii) a Bayes occupancy-persistence layer:** the three `blocked`
-(`free_along_ego_path`) modes -- single-voxel-noise, single-frame-artifact, and
-ego-drives-past-static-as-clears -- are noise / temporal, not single-frame geometry. Real
-`blocked` retrieval is unchanged at `{0103, 0655, 1077}` (still false positives) until (ii).
+**Still v0, deferred to (ii):** the three `blocked` (`free_along_ego_path`) modes --
+single-voxel-noise, single-frame-artifact, and ego-drives-past-static-as-clears -- are noise /
+temporal, not single-frame geometry. Real `blocked` retrieval is unchanged at `{0103, 0655, 1077}`
+(still false positives) until (ii).
+
+## v1 (ii) cluster-noise + static scope (2026-06-20): occquery closed as static per PLAN s0
+
+Re-reading PLAN s0 (occquery = geometry/occupancy STATIC free-space; dynfield = dynamics/time):
+two of the three remaining `blocked` modes are dynamics, not occquery's job -- forcing them into
+occquery would be the premature-core risk PLAN s10 names. So (ii) does the single-frame fix and
+hands the rest to dynfield:
+
+- **single-voxel-noise-as-blocked -> fixed.** `reachable_free_field` gained `min_cluster_voxels`
+  (drops 8-connected obstacle components below N voxels). `free_along_ego_path` is re-implemented
+  on the reachable substrate (centerline reachable to a constant-velocity reach), and the
+  retrieval namespace sets `min_cluster_voxels=2`. Real Occ3D mini: scene-0655 blocked frames
+  `[8,9,10,22,23,24] -> []`, scene-1077 `[25,26] -> []` -- the lone voxels drop, both leave the set.
+- **blocked_then_clears -> free_path_is_blocked.** The query is now static (scope=any): "the path
+  was blocked in some frame". The temporal transition (blocked->clears) and the relative-motion
+  "it actually pulled away" check are dynamics, moved to the dynfield experiment.
+
+That leaves **scene-0103** in `free_path_is_blocked`, and it is NOT a single voxel: f2 has a
+~4-voxel clump dead-center at forward ~2 m (image-verified: the centerline is blocked at ~2 m,
+wide free space to the right). On the dense GT for THAT frame this is a real geometric blockage,
+so static occquery correctly reports it. But the clump exists for exactly one frame (audit:
+airborne 1.0-1.9 m AGL, nothing on the ground, gone by f3) -- a single-frame artifact. Calling it
+noise needs temporal persistence, which is the dynfield layer. occquery's honest output is "f2 has
+a free-space obstruction"; "it is a 1-frame artifact" is a dynfield verdict, not a static one.
+
+Final disposition of the five v0 false-positive modes:
+
+| mode | resolution |
+| --- | --- |
+| frontal-object-as-corridor | (i) C-space -- eliminated |
+| frontal-edge-as-side-clearance | (i) C-space -- eliminated |
+| single-voxel-noise-as-blocked | (ii) cluster filter -- eliminated (0655, 1077) |
+| single-frame-artifact-as-blocked | static-correct on the frame; temporal verdict -> dynfield (0103) |
+| ego-drives-past-static-as-clears | dynamics -> dynfield (transition query removed) |
+
+occquery is now static free-space, PLAN s0-aligned (premature-core avoided). 75 tests green;
+single-voxel noise verified gone on real Occ3D mini; scene-0103 image-verified as a real
+single-frame clump, not a stray voxel.

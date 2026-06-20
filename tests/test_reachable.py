@@ -78,3 +78,19 @@ def test_ego_in_collision_yields_empty_reachable():
     f = reachable_free_field(_grid(occ), _ego(), 2.0)
     assert not f.is_reachable(5, 0)
     assert not f.reachable.any()
+
+
+def test_min_cluster_drops_isolated_noise_voxel():
+    occ = _empty()
+    occ[25, 20, 2] = OCCUPIED  # one isolated voxel on the centerline at forward 5
+    blocks = reachable_free_field(_grid(occ), _ego(), 2.0, min_cluster_voxels=1)
+    drops = reachable_free_field(_grid(occ), _ego(), 2.0, min_cluster_voxels=2)
+    assert not blocks.is_reachable(5, 0)   # the lone voxel inflates over the centerline ...
+    assert drops.is_reachable(5, 0)        # ... but is dropped as noise at min_cluster=2
+
+
+def test_min_cluster_keeps_real_clump():
+    occ = _empty()
+    occ[25:27, 19:22, 2] = OCCUPIED  # a 2x3 clump (6 voxels) -- a real obstacle
+    f = reachable_free_field(_grid(occ), _ego(), 2.0, min_cluster_voxels=2)
+    assert not f.is_reachable(5, 0)        # survives the cluster filter

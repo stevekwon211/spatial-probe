@@ -32,16 +32,14 @@ queries:
     refav_expressible: false
     rationale: "free-space width is a property of empty space, not of any object box"
 
-  - id: blocked_then_clears
-    nl: "the planned path ahead was blocked, then became free within about 2 seconds"
+  - id: free_path_is_blocked
+    nl: "the ego's straight-ahead path was blocked by an (unboxed) free-space obstruction in some frame"
     backend: occupancy
     status: implemented
-    scope: transition
-    before: "not free_along_ego_path(scene, t, horizon=1.0)"
-    after: "free_along_ego_path(scene, t, horizon=1.0)"
-    within_frames: 3
+    scope: any
+    predicate: "not free_along_ego_path(scene, t, horizon=1.0)"
     refav_expressible: false
-    rationale: "a temporal free-path transition over the occupancy field; box tracks cannot express free-space"
+    rationale: "free-space path blockage is a property of empty space, not any object box. The temporal version (blocked->clears) and the relative-motion 'it actually pulled away' check are dynamics, deferred to the dynfield experiment -- occquery stays static per PLAN s0. min_cluster_voxels=2 (retrieval.namespace) drops lone-voxel sensor noise."
 
   - id: near_a_tracked_vehicle
     nl: "ego came within 2 m of another vehicle"

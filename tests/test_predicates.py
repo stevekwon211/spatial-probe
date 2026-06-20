@@ -158,6 +158,15 @@ def test_free_path_unknown_policy():
     assert free_along_ego_path(g, _ego(), 2.0, unknown_policy=UnknownPolicy.OCCUPIED) is False
 
 
+def test_free_path_isolated_voxel_dropped_at_min_cluster():
+    # FP mode 'single-voxel-noise-as-blocked': a lone voxel on the path trips v0 'blocked'; at
+    # min_cluster_voxels>=2 it is dropped as noise (single-frame geometry; temporal is dynfield).
+    occ = _empty()
+    occ[25, 20, 2] = OCCUPIED  # one isolated voxel on the centerline at forward 5
+    assert free_along_ego_path(_grid(occ), _ego(), 2.0, min_cluster_voxels=1) is False
+    assert free_along_ego_path(_grid(occ), _ego(), 2.0, min_cluster_voxels=2) is True
+
+
 # --- min_free_width_along_path ---
 
 def test_min_free_width_symmetric_corridor():

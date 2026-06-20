@@ -73,6 +73,18 @@ class ReachableField:
         return float(self.clearance[ix]) if ix is not None else float("inf")
 
 
+def _drop_small_clusters(obstacle: np.ndarray, min_size: int) -> np.ndarray:
+    """Drop 8-connected obstacle components smaller than `min_size` voxels -- a lone sensor-noise
+    voxel is not an obstacle. Single-frame geometry only; temporal persistence is dynfield's job."""
+    labels, n = ndimage.label(obstacle, structure=np.ones((3, 3), dtype=int))
+    if n == 0:
+        return obstacle
+    sizes = np.bincount(labels.ravel())
+    keep = sizes >= min_size
+    keep[0] = False  # background label 0 is never an obstacle
+    return keep[labels]
+
+
 def reachable_free_field(
     grid: OccupancyGrid,
     ego: EgoPose,
@@ -80,12 +92,14 @@ def reachable_free_field(
     *,
     unknown_policy: UnknownPolicy = UnknownPolicy.FREE,
     margin: float = 0.0,
+    min_cluster_voxels: int = 1,
 ) -> ReachableField:
     """Build the ego's reachable free-space field over a forward horizon.
 
-    `margin` widens the C-space inflation beyond the ego half-width (a safety buffer). The BEV
-    spans the ego body plus a constant-velocity forward reach, and +/-`_LATERAL_HALF_WINDOW`
-    laterally. Unknown voxels follow `unknown_policy` exactly as the v0 predicates did.
+    `margin` widens the C-space inflation beyond the ego half-width (a safety buffer).
+    `min_cluster_voxels` > 1 drops obstacle clusters smaller than that many voxels as noise (a lone
+    voxel is not an obstacle). The BEV spans the ego body plus a constant-velocity forward reach,
+    and +/-`_LATERAL_HALF_WINDOW` laterally. Unknown voxels follow `unknown_policy` as v0 did.
     """
     res = grid.voxel_size
     reach = ego.length / 2.0 + ego.speed * horizon
@@ -103,6 +117,8 @@ def reachable_free_field(
         li = np.round((lat - l_min) / res).astype(int)
         inb = (fi >= 0) & (fi < nf) & (li >= 0) & (li < nl)
         obstacle[fi[inb], li[inb]] = True
+    if min_cluster_voxels > 1:
+        obstacle = _drop_small_clusters(obstacle, min_cluster_voxels)
 
     # centerline-to-center distance (m) from every cell to the nearest obstacle voxel center
     raw_dist = ndimage.distance_transform_edt(~obstacle) * res
