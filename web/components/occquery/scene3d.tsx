@@ -2,16 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import {
-  Grid,
-  Line,
-  OrbitControls,
-  GizmoHelper,
-  GizmoViewport,
-  Stats,
-  OrthographicCamera,
-  PerspectiveCamera,
-} from "@react-three/drei";
+import { Grid, Line, OrbitControls, OrthographicCamera, PerspectiveCamera, Stats } from "@react-three/drei";
 import * as THREE from "three";
 import { CAMERA_PRESETS, useViewer, type ColorMode } from "./store";
 
@@ -19,7 +10,9 @@ export type Obstacle = [number, number, number, number]; // ego frame: forward, 
 
 type Ranges = { minU: number; maxU: number; maxF: number; maxL: number };
 
-// Occ3D-nuScenes semantic class -> color (0-16; 17=free is never exported)
+// Pre-allocated instance budget; mesh.count is set per frame so we never re-mount on frame change.
+const MAX_VOXELS = 12000;
+
 export const SEMANTIC_COLORS: Record<number, string> = {
   0: "#9ca3af", 1: "#f59e0b", 2: "#a855f7", 3: "#0ea5e9", 4: "#3b82f6",
   5: "#6366f1", 6: "#a855f7", 7: "#ef4444", 8: "#fbbf24", 9: "#0ea5e9",
@@ -40,19 +33,21 @@ function colorFor(mode: ColorMode, f: number, l: number, u: number, cls: number,
   else if (mode === "forward") t = Math.min(f, r.maxF) / (r.maxF + 1e-6);
   else if (mode === "lateral") t = Math.abs(l) / (r.maxL + 1e-6);
   const clamped = Math.max(0, Math.min(1, t));
-  return c.setHSL(0.66 - 0.62 * clamped, 0.75, 0.55); // blue (low) -> red (high)
+  return c.setHSL(0.66 - 0.62 * clamped, 0.75, 0.55);
 }
 
 function Voxels({ obstacles, size }: { obstacles: Obstacle[]; size: number }) {
   const ref = useRef<THREE.InstancedMesh>(null!);
   const colorMode = useViewer((s) => s.colorMode);
   const voxelScale = useViewer((s) => s.voxelScale);
+  const voxelShape = useViewer((s) => s.voxelShape);
   const voxelOpacity = useViewer((s) => s.voxelOpacity);
   const wireframe = useViewer((s) => s.wireframe);
-  const voxelShape = useViewer((s) => s.voxelShape);
 
+  // Update matrices/colors in place (no React re-render of the mesh, no re-mount on frame change).
   useEffect(() => {
-    if (!ref.current || !obstacles.length) return;
+    const mesh = ref.current;
+    if (!mesh) return;
     const m = new THREE.Matrix4();
     const c = new THREE.Color();
     let minU = Infinity, maxU = -Infinity, maxF = 1, maxL = 1;
@@ -61,28 +56,24 @@ function Voxels({ obstacles, size }: { obstacles: Obstacle[]; size: number }) {
       maxF = Math.max(maxF, f); maxL = Math.max(maxL, Math.abs(l));
     }
     const r: Ranges = { minU, maxU, maxF, maxL };
-    for (let i = 0; i < obstacles.length; i++) {
+    const sc = size * voxelScale;
+    const n = Math.min(obstacles.length, MAX_VOXELS);
+    for (let i = 0; i < n; i++) {
       const [f, l, u, cls] = obstacles[i];
+      m.makeScale(sc, sc, sc);
       m.setPosition(f, u, l);
-      ref.current.setMatrixAt(i, m);
-      ref.current.setColorAt(i, colorFor(colorMode, f, l, u, cls, r, c));
+      mesh.setMatrixAt(i, m);
+      mesh.setColorAt(i, colorFor(colorMode, f, l, u, cls, r, c));
     }
-    ref.current.instanceMatrix.needsUpdate = true;
-    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
-  }, [obstacles, colorMode]);
+    mesh.count = n;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  }, [obstacles, colorMode, voxelScale, size]);
 
-  const s = size * voxelScale;
+  // key only on shape, so swapping cube<->sphere re-mounts but frame stepping never does
   return (
-    <instancedMesh
-      key={`${obstacles.length}-${voxelShape}`}
-      ref={ref}
-      args={[undefined, undefined, Math.max(obstacles.length, 1)]}
-    >
-      {voxelShape === "sphere" ? (
-        <sphereGeometry args={[s * 0.6, 8, 8]} />
-      ) : (
-        <boxGeometry args={[s, s, s]} />
-      )}
+    <instancedMesh key={voxelShape} ref={ref} args={[undefined, undefined, MAX_VOXELS]}>
+      {voxelShape === "sphere" ? <sphereGeometry args={[0.5, 10, 10]} /> : <boxGeometry args={[1, 1, 1]} />}
       <meshStandardMaterial transparent opacity={voxelOpacity} wireframe={wireframe} toneMapped={false} />
     </instancedMesh>
   );
@@ -133,7 +124,6 @@ export function Scene3D({
   const showEgo = useViewer((s) => s.showEgo);
   const showForward = useViewer((s) => s.showForward);
   const showGrid = useViewer((s) => s.showGrid);
-  const showGizmo = useViewer((s) => s.showGizmo);
   const showStats = useViewer((s) => s.showStats);
   const projection = useViewer((s) => s.projection);
 
@@ -149,16 +139,9 @@ export function Scene3D({
       <directionalLight position={[10, 20, 10]} intensity={0.8} />
       {showEgo && <Ego w={ego.width} l={ego.length} h={ego.height} />}
       {showVoxels && <Voxels obstacles={obstacles} size={voxelSize} />}
-      {showForward && (
-        <Line points={[[0, 0.2, 0], [8, 0.2, 0]]} color="#ef4444" lineWidth={3} />
-      )}
+      {showForward && <Line points={[[0, 0.2, 0], [8, 0.2, 0]]} color="#ef4444" lineWidth={3} />}
       {showGrid && (
         <Grid args={[80, 80]} cellSize={2} sectionSize={10} infiniteGrid fadeDistance={60} cellColor="#222" sectionColor="#333" />
-      )}
-      {showGizmo && (
-        <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
-          <GizmoViewport axisColors={["#ef4444", "#22c55e", "#3b82f6"]} labelColor="#999" />
-        </GizmoHelper>
       )}
       {showStats && <Stats />}
       <OrbitControls makeDefault enableDamping dampingFactor={0.1} />

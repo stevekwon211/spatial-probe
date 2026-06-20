@@ -2,9 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
+import Link from "next/link";
+import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
 import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Obstacle } from "./scene3d";
 import { ControlPanel } from "./controls";
 import { useViewer } from "./store";
+import { GlassPanel } from "./glass";
+import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type Predicates = {
   ego_width: number;
@@ -20,8 +26,8 @@ const BASE = "/data/occquery";
 function Row({ k, v, hot }: { k: string; v: string; hot?: boolean }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-muted-foreground">{k}</span>
-      <span className={hot ? "text-red-400" : ""}>{v}</span>
+      <span className="text-white/40">{k}</span>
+      <span className={hot ? "text-red-400" : "text-white/80"}>{v}</span>
     </div>
   );
 }
@@ -30,17 +36,29 @@ function Legend({ obstacles }: { obstacles: Obstacle[] }) {
   const present = Array.from(new Set(obstacles.map((o) => o[3]))).sort((a, b) => a - b);
   if (!present.length) return null;
   return (
-    <div className="mb-3 rounded-md border p-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">classes (box-only sees ~vehicles + peds; occquery sees all)</div>
+    <div className="mb-3 rounded-lg border border-white/10 bg-white/[0.03] p-2">
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">classes — box-only sees ~vehicles + peds; occquery sees all</div>
       <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
         {present.map((c) => (
           <div key={c} className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: SEMANTIC_COLORS[c] ?? "#9ca3af" }} />
-            <span className="text-muted-foreground">{CLASS_NAMES[c] ?? `class ${c}`}</span>
+            <span className="text-white/50">{CLASS_NAMES[c] ?? `class ${c}`}</span>
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+function IconButton({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className="flex size-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -157,57 +175,41 @@ export function OccqueryViewer() {
   const p = fm?.predicates;
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] w-full">
-      <div className="relative flex-1">
-        {meta && (
-          <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} onGl={(gl) => (glRef.current = gl)} />
-        )}
+    <div className="relative h-screen w-full overflow-hidden bg-[#080808]">
+      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} onGl={(gl) => (glRef.current = gl)} />}
 
-        <div className="absolute right-4 top-4 flex gap-2">
-          <button onClick={copyView} className="rounded-md bg-white/10 px-3 py-2 text-sm text-white backdrop-blur transition hover:bg-white/20">
-            {copied ? "✓ copied" : "📷 copy"}
-          </button>
-          <button onClick={downloadView} className="rounded-md bg-white/10 px-3 py-2 text-sm text-white backdrop-blur transition hover:bg-white/20">
-            ⤓ PNG
+      {/* top-left — context + view controls */}
+      <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">
+        <div className="flex items-center justify-between px-3 pt-3 pb-2">
+          <Link
+            href="/"
+            title="back to pipeline"
+            className="flex items-center gap-1 text-sm font-medium tracking-tight text-white/90 transition-colors hover:text-white"
+          >
+            <ChevronLeft className="size-3.5 text-white/40" />
+            occquery
+          </Link>
+          <button onClick={reset} className="flex items-center gap-1 text-[11px] text-white/40 transition-colors hover:text-white/70">
+            <RotateCcw className="size-3" />
+            reset
           </button>
         </div>
 
-        {meta && fm && (
-          <div className="absolute inset-x-4 bottom-4 flex items-center gap-3 rounded-lg bg-black/50 px-3 py-2 backdrop-blur">
-            <button onClick={() => set("playing", !playing)} className="rounded bg-white/10 px-2.5 py-1 text-sm text-white">
-              {playing ? "⏸" : "▶"}
-            </button>
-            <button onClick={() => setFrameIdx((i) => Math.max(0, i - 1))} className="text-white/60 hover:text-white">⏮</button>
-            <input type="range" min={0} max={meta.n_frames - 1} value={frameIdx} onChange={(e) => setFrameIdx(Number(e.target.value))} className="flex-1 accent-blue-500" />
-            <button onClick={() => setFrameIdx((i) => Math.min(meta.n_frames - 1, i + 1))} className="text-white/60 hover:text-white">⏭</button>
-            <span className="w-14 text-right font-mono text-xs text-white/60">{fm.t}/{meta.n_frames - 1}</span>
-            <select value={speed} onChange={(e) => set("speed", Number(e.target.value))} className="rounded bg-transparent text-xs text-white/60">
-              {[0.25, 0.5, 1, 2, 4].map((s) => (
-                <option key={s} value={s} className="bg-black">{s}x</option>
+        <div className="px-3 pb-2">
+          <Select value={scene} onValueChange={(v) => setScene(v as string)}>
+            <SelectTrigger className="w-full border-white/10 bg-white/[0.04]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {scenes.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
-            </select>
-          </div>
-        )}
-
-        <div className="pointer-events-none absolute bottom-20 left-4 text-[11px] text-white/40">
-          drag rotate · scroll zoom · space play · ←→ step · F fullscreen · R reset
+            </SelectContent>
+          </Select>
         </div>
-      </div>
-
-      <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l bg-background p-3 text-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">occquery 3D</h2>
-          <button onClick={reset} className="text-xs text-muted-foreground hover:text-foreground">reset</button>
-        </div>
-
-        <select value={scene} onChange={(e) => setScene(e.target.value)} className="mb-3 w-full rounded border bg-transparent px-2 py-1 text-sm">
-          {scenes.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
 
         {meta && fm && p && (
-          <div className="mb-3 space-y-1 rounded-md border p-2 font-mono text-xs">
+          <div className="mx-3 mb-2 space-y-1 rounded-lg bg-white/[0.04] p-2.5 font-mono text-xs">
             <Row k="speed" v={`${fm.speed} m/s`} />
             <Row k="obstacles" v={`${fm.n_obstacles_band}`} />
             <Row k="min_free_width" v={p.min_free_width === null ? "none" : `${p.min_free_width} m`} />
@@ -216,15 +218,70 @@ export function OccqueryViewer() {
           </div>
         )}
 
-        {colorMode === "semantic" && <Legend obstacles={obstacles} />}
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+          {colorMode === "semantic" && <Legend obstacles={obstacles} />}
+          <ControlPanel />
+        </div>
+      </GlassPanel>
 
-        <ControlPanel />
+      {/* right — query / chat (summoned, placeholder for now) */}
+      <GlassPanel className="absolute top-4 right-4 bottom-4 flex w-80 flex-col text-white">
+        <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+          <Sparkles className="size-4 text-white/60" />
+          <span className="text-sm font-medium">Ask occquery</span>
+          <span className="ml-auto rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/50">soon</span>
+        </div>
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <p className="text-xs leading-relaxed text-white/40">
+            Query scenes in natural language — &quot;find where free width drops below 1&nbsp;m&quot;. occquery turns the
+            question into geometric predicates and jumps you to the frames. Coming soon.
+          </p>
+        </div>
+        <div className="border-t border-white/10 p-3">
+          <div className="flex h-9 items-center rounded-xl bg-white/[0.04] px-3 text-xs text-white/30">Ask a question…</div>
+        </div>
+      </GlassPanel>
 
-        <p className="mt-3 text-[10px] leading-snug text-muted-foreground">
-          measurements only — &quot;danger&quot; (lead car vs wall) is the dynfield layer. occquery shows what
-          box-only can&apos;t: free-space geometry.
-        </p>
-      </aside>
+      {/* bottom-center — time + capture */}
+      {meta && fm && (
+        <GlassPanel className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 px-3 py-2 text-white">
+          <IconButton onClick={() => set("playing", !playing)} label={playing ? "pause" : "play"}>
+            {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+          </IconButton>
+          <IconButton onClick={() => setFrameIdx((i) => Math.max(0, i - 1))} label="previous frame">
+            <SkipBack className="size-4" />
+          </IconButton>
+          <Slider
+            className="mx-1 w-64"
+            min={0}
+            max={meta.n_frames - 1}
+            value={[frameIdx]}
+            onValueChange={(v) => setFrameIdx(Array.isArray(v) ? v[0] : v)}
+          />
+          <IconButton onClick={() => setFrameIdx((i) => Math.min(meta.n_frames - 1, i + 1))} label="next frame">
+            <SkipForward className="size-4" />
+          </IconButton>
+          <span className="w-12 text-right font-mono text-xs text-white/50">{fm.t}/{meta.n_frames - 1}</span>
+          <Select value={String(speed)} onValueChange={(v) => set("speed", Number(v))}>
+            <SelectTrigger size="sm" className="border-white/10 bg-white/[0.04]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[0.25, 0.5, 1, 2, 4].map((s) => (
+                <SelectItem key={s} value={String(s)}>{s}x</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="mx-1 h-5 w-px bg-white/10" />
+          <IconButton onClick={copyView} label="copy view to clipboard">
+            {copied ? <Check className="size-4 text-white" /> : <Camera className="size-4" />}
+          </IconButton>
+          <IconButton onClick={downloadView} label="download PNG">
+            <Download className="size-4" />
+          </IconButton>
+        </GlassPanel>
+      )}
+
     </div>
   );
 }

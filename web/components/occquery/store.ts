@@ -9,7 +9,6 @@ export type Settings = {
   showEgo: boolean;
   showForward: boolean;
   showGrid: boolean;
-  showGizmo: boolean;
   showStats: boolean;
   voxelShape: VoxelShape;
   voxelScale: number;
@@ -26,7 +25,7 @@ export type Settings = {
 };
 
 export const DEFAULTS: Settings = {
-  showVoxels: true, showEgo: true, showForward: true, showGrid: true, showGizmo: true,
+  showVoxels: true, showEgo: true, showForward: true, showGrid: true,
   showStats: false, voxelShape: "cube", voxelScale: 0.85, voxelOpacity: 1, wireframe: false,
   egoOpacity: 0.55, colorMode: "height", projection: "perspective",
   playing: false, speed: 1, loop: true, panelCollapsed: false, settingsOpen: false,
