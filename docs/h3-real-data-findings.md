@@ -35,6 +35,28 @@ and the failures are documented rather than hidden.
 | `tight_clearance_at_speed` | {scene-1077} | a 0.28 m side gap at 8.6 m/s (>30 km/h) — a plausible tight side pass. |
 | `blocked_then_clears` | {scene-0103, 0655, 1077} | a temporal (blocked → clear within 3 frames) pattern over a horizon. Single-frame visual labeling is INSUFFICIENT to confirm the transition; deferred to v1 (frame-pair / trajectory review). |
 
+## Deeper finding (2026-06-20): simple geometry confuses dead-ahead with side / corridor
+
+Adding a measurement marker to viz (the exact spot the predicate took its reading) exposed that the
+v0 retrievals are weaker than the first visual pass suggested:
+
+- `corridor_narrows` {scene-0061}: the 0.80 m "gap" is the left/right edge of a single obstacle
+  CLUMP ~9 m dead ahead, not two converging walls. `min_free_width` measures the lateral extent of a
+  frontal object as if it were a corridor → effectively a **false positive**.
+- `tight_clearance` {scene-1077}: the 0.28 m "side gap" is the side edge of a frontal clump ~22 m
+  ahead, not a wall being passed.
+
+**Root cause.** The v0 predicates are pure local geometry (distance / width along the straight
+centerline). They have no notion of the ego PATH, of going AROUND an obstacle, or of free-space
+connectivity, so they cannot separate "object dead ahead (drive around it)" from "wall beside me
+(squeeze past)" from "corridor narrowing (cannot pass)". On synthetic scenes these were separated by
+construction; on real city occupancy they collapse together.
+
+**Honest consequence.** **H1 (expressivity vs RefAV) remains the strong, oracle-free result. H3
+(denotation correctness) is weak under v0's simple geometry** and needs path-aware /
+connected-free-region predicates (a reachable-free-space test, not a centerline scan) to be
+trustworthy. That is real v1 research, not a tweak — recorded here rather than papered over.
+
 ## What this is NOT
 
 - Not a denotation P/R/F1: the GT shares the predicate's data source, so agreement is not external

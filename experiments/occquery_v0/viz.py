@@ -44,7 +44,49 @@ def top_down_obstacles(grid, ego) -> np.ndarray:
     return (occ[:, :, band] == OCCUPIED).any(axis=2)
 
 
-def render(scene, t, out_path: pathlib.Path) -> None:
+def _mark_measurement(ax, grid, ego, query: str | None) -> None:
+    """Overlay WHERE the predicate took its measurement, so a human can verify the match."""
+    centers = grid.obstacle_centers(max_height_agl=ego.height)
+    if not len(centers):
+        return
+    fwd, lat = ego.to_ego_frame(centers[:, :2])
+    if query == "corridor":
+        reach = ego.length / 2.0 + ego.speed * 2.0
+        hv = grid.voxel_size / 2.0
+        best = (float("inf"), None)
+        k = 0
+        while k * grid.voxel_size <= reach + 1e-9:
+            sft = k * grid.voxel_size
+            k += 1
+            near = np.abs(fwd - sft) <= hv
+            if not near.any():
+                continue
+            side = lat[near]
+            lft = side[side > 0]
+            rgt = side[side < 0]
+            if lft.size and rgt.size:
+                top = float(lft.min()) - hv
+                bot = float(rgt.max()) + hv
+                w = max(0.0, top) + max(0.0, -bot)
+                if w < best[0]:
+                    best = (w, (sft, top, bot))
+        if best[1] is not None:
+            sft, top, bot = best[1]
+            ax.plot([sft, sft], [bot, top], color="#2563eb", lw=3, solid_capstyle="round", zorder=5)
+            ax.annotate(f"{best[0]:.2f} m gap here", (sft + 0.6, (top + bot) / 2),
+                        color="#2563eb", fontsize=9, va="center", zorder=6)
+    elif query == "tight":
+        half = ego.width / 2.0 + grid.voxel_size / 2.0
+        beside = (fwd >= 0.0) & (fwd <= 20.0) & (np.abs(lat) > half)
+        if not beside.any():
+            return
+        i = int(np.argmin(np.abs(lat[beside]) - half))
+        bx, by = float(fwd[beside][i]), float(lat[beside][i])
+        ax.plot([bx], [by], "x", color="#2563eb", markersize=13, markeredgewidth=3, zorder=6)
+        ax.annotate("nearest side obstacle", (bx + 0.6, by), color="#2563eb", fontsize=9, va="center", zorder=6)
+
+
+def render(scene, t, out_path: pathlib.Path, query: str | None = None) -> None:
     grid = scene.grid_at(t)
     ego = scene.ego_at(t)
     obstacle = top_down_obstacles(grid, ego)  # [i=forward(x), j=lateral(y)]
@@ -73,6 +115,7 @@ def render(scene, t, out_path: pathlib.Path) -> None:
     ax.set_xlim(-8, 40)
     ax.set_ylim(-20, 20)
     ax.grid(alpha=0.2)
+    _mark_measurement(ax, grid, ego, query)
     fig.savefig(out_path, dpi=85, bbox_inches="tight")
     plt.close(fig)
 
@@ -103,7 +146,7 @@ def main(query: str = "corridor") -> None:
     for name in MINI:
         scene = load_scene(name, _DATA, mask="none")
         t = _pick_frame(scene, query)
-        render(scene, t, out / f"{name}.png")
+        render(scene, t, out / f"{name}.png", query=query)
         g, ego = scene.grid_at(t), scene.ego_at(t)
         w = min_free_width_along_path(g, ego, 2.0)
         cl = lateral_clearance(g, ego)
