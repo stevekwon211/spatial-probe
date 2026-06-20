@@ -57,7 +57,7 @@ export const COLOR_MODES: { id: ColorMode; label: string; enabled: boolean }[] =
   { id: "height", label: "Height", enabled: true },
   { id: "forward", label: "Forward", enabled: true },
   { id: "lateral", label: "Lateral", enabled: true },
-  { id: "semantic", label: "Semantic", enabled: false },
+  { id: "semantic", label: "Semantic", enabled: true },
   { id: "state", label: "Occ state", enabled: false },
 ];
 

@@ -23,7 +23,7 @@ sys.path.insert(0, str(_HERE.parents[1] / "src"))
 
 import numpy as np  # noqa: E402
 
-from probe.adapters.occ3d import load_scene  # noqa: E402
+from probe.adapters.occ3d import _ordered_tokens, load_scene  # noqa: E402
 from probe.grid import OCCUPIED  # noqa: E402
 from probe.predicates.clearance import lateral_clearance  # noqa: E402
 from probe.predicates.freepath import free_along_ego_path, min_free_width_along_path  # noqa: E402
@@ -41,27 +41,36 @@ def _finite(v: float) -> float | None:
     return None if v == float("inf") else round(float(v), 2)
 
 
-def _band_obstacles(scene, t):
+def _band_obstacles(scene, t, semantics):
     grid, ego = scene.grid_at(t), scene.ego_at(t)
     occ = grid.occupancy
     idx = np.argwhere(occ == OCCUPIED)
     centers = np.asarray(grid.origin) + idx * grid.voxel_size
     z = centers[:, 2]
     band = (z > grid.ground_height) & (z <= grid.ground_height + ego.height)
-    return grid, ego, np.round(centers[band], 1), int(band.sum()), int(len(idx))
+    cb = np.round(centers[band], 1)
+    ib = idx[band]
+    classes = semantics[ib[:, 0], ib[:, 1], ib[:, 2]].astype(int)
+    # [forward, left, up, semantic_class] in the ego frame (class = raw Occ3D 0-16)
+    obstacles = [[float(x), float(y), float(zz), int(c)] for (x, y, zz), c in zip(cb, classes)]
+    return grid, ego, obstacles, int(band.sum()), int(len(idx))
 
 
 def main() -> None:
     _OUT.mkdir(parents=True, exist_ok=True)
+    annotations = json.loads((_DATA / "annotations.json").read_text())
     index = []
     for name in MINI:
         scene = load_scene(name, _DATA, mask="none")
         e0, g0 = scene.ego_at(0), scene.grid_at(0)
+        si = annotations["scene_infos"][name]
+        tokens = _ordered_tokens(si)
         (_OUT / name).mkdir(exist_ok=True)
         metas = []
-        for t in scene.times():
-            grid, ego, obstacles, n_band, n_total = _band_obstacles(scene, t)
-            (_OUT / name / f"f{t}.json").write_text(json.dumps({"t": t, "obstacles": obstacles.tolist()}))
+        for i, t in enumerate(scene.times()):
+            semantics = np.load(_DATA / si[tokens[i]]["gt_path"])["semantics"]
+            grid, ego, obstacles, n_band, n_total = _band_obstacles(scene, t, semantics)
+            (_OUT / name / f"f{t}.json").write_text(json.dumps({"t": t, "obstacles": obstacles}))
             metas.append({
                 "t": t,
                 "speed": round(float(ego.speed), 2),

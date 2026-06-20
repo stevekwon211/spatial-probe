@@ -15,17 +15,30 @@ import {
 import * as THREE from "three";
 import { CAMERA_PRESETS, useViewer, type ColorMode } from "./store";
 
-export type Obstacle = [number, number, number]; // ego frame: forward, left, up
+export type Obstacle = [number, number, number, number]; // ego frame: forward, left, up, class
 
 type Ranges = { minU: number; maxU: number; maxF: number; maxL: number };
 
-function colorFor(mode: ColorMode, f: number, l: number, u: number, r: Ranges, c: THREE.Color) {
-  if (mode === "flat") return c.set("#3b82f6");
+// Occ3D-nuScenes semantic class -> color (0-16; 17=free is never exported)
+export const SEMANTIC_COLORS: Record<number, string> = {
+  0: "#9ca3af", 1: "#f59e0b", 2: "#a855f7", 3: "#0ea5e9", 4: "#3b82f6",
+  5: "#6366f1", 6: "#a855f7", 7: "#ef4444", 8: "#fbbf24", 9: "#0ea5e9",
+  10: "#2563eb", 15: "#64748b", 16: "#22c55e",
+};
+
+export const CLASS_NAMES: Record<number, string> = {
+  0: "other", 1: "barrier", 2: "bicycle", 3: "bus", 4: "car", 5: "constr veh",
+  6: "motorcycle", 7: "pedestrian", 8: "cone", 9: "trailer", 10: "truck",
+  15: "manmade", 16: "vegetation",
+};
+
+function colorFor(mode: ColorMode, f: number, l: number, u: number, cls: number, r: Ranges, c: THREE.Color) {
+  if (mode === "semantic") return c.set(SEMANTIC_COLORS[cls] ?? "#9ca3af");
+  if (mode === "flat" || mode === "state") return c.set("#3b82f6");
   let t = 0;
   if (mode === "height") t = (u - r.minU) / (r.maxU - r.minU + 1e-6);
   else if (mode === "forward") t = Math.min(f, r.maxF) / (r.maxF + 1e-6);
   else if (mode === "lateral") t = Math.abs(l) / (r.maxL + 1e-6);
-  else return c.set("#3b82f6"); // semantic/state not available yet -> flat
   const clamped = Math.max(0, Math.min(1, t));
   return c.setHSL(0.66 - 0.62 * clamped, 0.75, 0.55); // blue (low) -> red (high)
 }
@@ -49,10 +62,10 @@ function Voxels({ obstacles, size }: { obstacles: Obstacle[]; size: number }) {
     }
     const r: Ranges = { minU, maxU, maxF, maxL };
     for (let i = 0; i < obstacles.length; i++) {
-      const [f, l, u] = obstacles[i];
+      const [f, l, u, cls] = obstacles[i];
       m.setPosition(f, u, l);
       ref.current.setMatrixAt(i, m);
-      ref.current.setColorAt(i, colorFor(colorMode, f, l, u, r, c));
+      ref.current.setColorAt(i, colorFor(colorMode, f, l, u, cls, r, c));
     }
     ref.current.instanceMatrix.needsUpdate = true;
     if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
-import { Scene3D, type Obstacle } from "./scene3d";
+import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Obstacle } from "./scene3d";
 import { ControlPanel } from "./controls";
 import { useViewer } from "./store";
 
@@ -26,6 +26,24 @@ function Row({ k, v, hot }: { k: string; v: string; hot?: boolean }) {
   );
 }
 
+function Legend({ obstacles }: { obstacles: Obstacle[] }) {
+  const present = Array.from(new Set(obstacles.map((o) => o[3]))).sort((a, b) => a - b);
+  if (!present.length) return null;
+  return (
+    <div className="mb-3 rounded-md border p-2">
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">classes (box-only sees ~vehicles + peds; occquery sees all)</div>
+      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+        {present.map((c) => (
+          <div key={c} className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: SEMANTIC_COLORS[c] ?? "#9ca3af" }} />
+            <span className="text-muted-foreground">{CLASS_NAMES[c] ?? `class ${c}`}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function OccqueryViewer() {
   const [scenes, setScenes] = useState<string[]>([]);
   const [scene, setScene] = useState("scene-0061");
@@ -41,6 +59,7 @@ export function OccqueryViewer() {
   const loop = useViewer((s) => s.loop);
   const set = useViewer((s) => s.set);
   const reset = useViewer((s) => s.reset);
+  const colorMode = useViewer((s) => s.colorMode);
 
   useEffect(() => {
     fetch(`${BASE}/index.json`).then((r) => r.json()).then((d) => setScenes(d.scenes.map((s: { scene: string }) => s.scene))).catch(() => {});
@@ -196,6 +215,8 @@ export function OccqueryViewer() {
             <Row k="free_path_blocked" v={p.free_path_blocked ? "TRUE" : "false"} hot={p.free_path_blocked} />
           </div>
         )}
+
+        {colorMode === "semantic" && <Legend obstacles={obstacles} />}
 
         <ControlPanel />
 
