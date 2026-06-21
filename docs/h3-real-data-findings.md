@@ -182,7 +182,7 @@ Final disposition of the five v0 false-positive modes:
 | single-frame-artifact-as-blocked | static-correct on the frame; temporal verdict -> dynfield (0103) |
 | ego-drives-past-static-as-clears | dynamics -> dynfield (transition query removed) |
 
-occquery is now static free-space, PLAN s0-aligned (premature-core avoided). 75 tests green;
+occquery is now static free-space, PLAN s0-aligned (premature-core avoided). 76 tests green;
 single-voxel noise verified gone on real Occ3D mini; scene-0103 image-verified as a real
 single-frame clump, not a stray voxel.
 

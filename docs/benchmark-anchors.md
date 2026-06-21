@@ -91,7 +91,7 @@ positive; "it's a lead car, not a wall" is a dynfield verdict.)
 
 - **Smoke (done).** Retrieval loop runs end-to-end on synthetic scenes; predicates verified on
   known geometry; the expressivity witness (identical box observables, occupancy distinguishes)
-  holds as an executable test. 59 unit/integration tests green. *Not a scientific result.*
+  holds as an executable test. 76 unit/integration tests green. *Not a scientific result.*
 - **Publishable.** On public Occ3D-nuScenes val: (a) expressivity separation — N safety queries
   expressible as occupancy predicates, ~0 in RefAV's released function set, checkable by anyone
   against `atomic_functions.py` (**verified 2026-06-20: 0 free-space primitives in the 33-function

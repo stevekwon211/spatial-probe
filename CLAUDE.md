@@ -2,7 +2,7 @@
 
 Research instrument that probes what a spatial representation *stores* (occupancy /
 geometry / dynamics) and whether that state is queryable + trustworthy enough to act on.
-Two halves: a **Python 3.11 core** (`src/probe/`, numpy + pyyaml, pytest/TDD) that runs
+Two halves: a **Python 3.11 core** (`src/probe/`, numpy + scipy + pyyaml, pytest/TDD) that runs
 falsifiable physical predicates over a voxel occupancy grid, and a **Next.js 15 / React 19
 / Tailwind 4 site** (`web/`) that reads experiment results for build-in-public.
 
@@ -17,8 +17,8 @@ retrieval). Per-topic external anchors and the verification ledger are in
 Python core (from repo root):
 ```sh
 python3.11 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"                 # numpy, pyyaml, pytest
-python -m pytest                        # 72 tests (~1.5s), no data needed
+pip install -e ".[dev]"                 # numpy, scipy, pyyaml, pytest
+python -m pytest                        # 76 tests (~1.5s), no data needed
 python -m pytest --collect-only -q      # cheap structural check
 pip install -e ".[data]"                # M2 only: adds nuscenes-devkit
 python experiments/occquery_v0/run.py   # synthetic smoke run -> results/ (NOT a result)
