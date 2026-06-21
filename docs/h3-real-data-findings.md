@@ -212,3 +212,13 @@ This re-reads the earlier sections of this doc:
   finer field (raw-LiDAR re-voxelization), not a predicate change. (Separately, `lateral_clearance`'s
   voxel-half guard reported 0.27 m there while the true nearest was 0.07 m -- it under-reports
   near-contact, a real fix to make.)
+
+## lateral_clearance guard -- re-verified, NO bug (2026-06-21)
+
+The occquery-h1-witnesses workflow (map agent, code+data) re-checked the voxel-half guard
+(clearance.py:69, `half = W/2 + voxel/2`). It is arithmetically CORRECT: gap = c - (W/2 + voxel/2)
+= (c - voxel/2) - W/2 = surface-to-surface, verified at 0.375 m on the witness fixture. The earlier
+"0.27 vs 0.07" framing is a 0.20 m = FULL-voxel gap (not off-by-half) and was a v0 reading mis-cited
+as a current bug. No fix needed -- flipping the sign would INTRODUCE a full-voxel over-report. An
+optional safety refinement (half-diagonal inflation, voxel*sqrt(2)/2) gives a guaranteed lower bound,
+but that is conservatism, not a bug fix. Recorded per research-integrity (report the negative).
