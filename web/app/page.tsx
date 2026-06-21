@@ -6,16 +6,13 @@ import { ReactFlow, Background, BackgroundVariant, Handle, Position, type Edge, 
 import "@xyflow/react/dist/style.css";
 import { IN_PROGRESS, PIPELINE, SHIPPED, THESIS, TOTAL } from "@/lib/pipeline";
 import { GlassPanel } from "@/components/occquery/glass";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-type ExpData = {
-  title: string;
-  axis: string;
-  oneLine: string;
-  status: string;
-  href?: string;
-};
+type ExpData = { title: string; axis: string; oneLine: string; status: string; href?: string };
 type StageData = { no: string; name: string };
+
+const TOOLTIP = "max-w-[230px] rounded-lg border border-white/10 bg-neutral-900/95 leading-relaxed text-white/80 backdrop-blur-xl";
 
 function statusLabel(status: string) {
   if (status === "in-progress") return "live";
@@ -39,7 +36,7 @@ function ExperimentNode({ data }: NodeProps) {
   const card = (
     <div
       className={cn(
-        "w-56 rounded-2xl border bg-neutral-900/60 p-3.5 backdrop-blur-xl transition-colors",
+        "w-52 rounded-2xl border bg-neutral-900/60 p-3.5 backdrop-blur-xl transition-colors",
         active ? "border-white/15 hover:border-white/40" : "border-white/[0.07] opacity-55",
       )}
     >
@@ -56,16 +53,23 @@ function ExperimentNode({ data }: NodeProps) {
         </span>
       </div>
       <div className="mt-1 text-[10px] uppercase tracking-wide text-white/35">{d.axis}</div>
-      <p className="mt-2 text-xs leading-relaxed text-white/50">{d.oneLine}</p>
       <Handle type="source" position={Position.Right} className="!h-1.5 !w-1.5 !border-0 !bg-white/25" />
     </div>
   );
-  return d.href ? (
+  const inner = d.href ? (
     <Link href={d.href} className="block">
       {card}
     </Link>
   ) : (
     card
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger render={inner} />
+      <TooltipContent side="bottom" sideOffset={8} className={TOOLTIP}>
+        {d.oneLine}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -115,16 +119,19 @@ function buildGraph(): { nodes: Node[]; edges: Edge[] } {
 
 const { nodes, edges } = buildGraph();
 
-const FLOW = ["raw logs", "3D state", "queryable", "trustworthy", "self-improving"];
-
 export default function Home() {
   return (
     <div className="relative h-screen w-full bg-[#080808]">
-      {/* left floating sidebar — workspace nav (skeleton for future multi-project canvas) */}
-      <GlassPanel className="absolute top-4 left-4 z-10 flex w-60 flex-col text-white">
+      <GlassPanel className="absolute top-4 left-4 z-10 flex w-56 flex-col text-white">
         <div className="px-3 pt-3 pb-2.5">
-          <div className="text-sm font-medium tracking-tight">spatial-probe</div>
-          <div className="mt-1 text-[11px] leading-snug text-white/40">{THESIS}</div>
+          <Tooltip>
+            <TooltipTrigger
+              render={<div className="w-fit cursor-default text-sm font-medium tracking-tight">spatial-probe</div>}
+            />
+            <TooltipContent side="bottom" align="start" className={TOOLTIP}>
+              {THESIS}
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="border-t border-white/10 px-3 py-2.5">
           <div className="mb-1.5 px-0.5 text-[10px] uppercase tracking-wider text-white/35">Projects</div>
@@ -143,19 +150,11 @@ export default function Home() {
         </div>
       </GlassPanel>
 
-      {/* top-right — status + flow axis */}
       <div className="pointer-events-none absolute top-6 right-6 z-10 text-right text-xs">
         <div className="font-mono text-white/55">
-          {SHIPPED}/{TOTAL} shipped · {IN_PROGRESS} live
+          {SHIPPED}/{TOTAL} shipped, {IN_PROGRESS} live
         </div>
-        <div className="mt-1.5 flex items-center justify-end gap-1.5 text-[10px] text-white/30">
-          {FLOW.map((f, i) => (
-            <span key={f} className="flex items-center gap-1.5">
-              {f}
-              {i < FLOW.length - 1 && <span className="text-white/20">→</span>}
-            </span>
-          ))}
-        </div>
+        <div className="mt-1 text-white/30">state, not render</div>
       </div>
 
       <ReactFlow

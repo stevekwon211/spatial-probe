@@ -24,7 +24,7 @@ export interface Stage {
 }
 
 export const THESIS =
-  "3D's essence is queryable, updatable state — not the render.";
+  "3D is queryable, updatable state, not the render.";
 
 export const PIPELINE: Stage[] = [
   {
@@ -36,7 +36,7 @@ export const PIPELINE: Stage[] = [
       {
         id: "asof",
         title: "ASOF",
-        axis: "render → state",
+        axis: "render to state",
         oneLine:
           "Does the converted state preserve action-relevant signal, or only look right? An acceptance gate at the door.",
         status: "planned",
@@ -48,7 +48,7 @@ export const PIPELINE: Stage[] = [
     id: "search",
     name: "Search",
     blurb:
-      "Find scenes by measured physical quantities — reproducibly, no hallucination.",
+      "Find scenes by measured physical quantities, reproducibly. No hallucination.",
     icon: Search,
     modules: [
       {
@@ -74,7 +74,7 @@ export const PIPELINE: Stage[] = [
         title: "GT-distrust",
         axis: "visibility",
         oneLine:
-          "Occlusion geometry predicts which occupancy labels are untrustworthy — a geometric review trigger.",
+          "Occlusion geometry predicts which occupancy labels are untrustworthy. A geometric review trigger.",
         status: "planned",
         statusLabel: "Planned",
       },
@@ -100,7 +100,7 @@ export const PIPELINE: Stage[] = [
         title: "Value-of-Correction",
         axis: "valuation",
         oneLine:
-          "Rank scenes by how much fixing a label actually moves the model — not by how many are wrong.",
+          "Rank scenes by how much fixing a label actually moves the model, not how many are wrong.",
         status: "planned",
         statusLabel: "Planned",
       },
@@ -109,7 +109,7 @@ export const PIPELINE: Stage[] = [
         title: "DynField-Necessity",
         axis: "dynamics / time",
         oneLine:
-          "Which stored motion fields a planner truly needs — and in which moments (cut-in, hard brake, low TTC).",
+          "Which stored motion fields a planner truly needs, and in which moments (cut-in, hard brake, low TTC).",
         status: "planned",
         statusLabel: "Planned",
       },

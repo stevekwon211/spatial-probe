@@ -10,7 +10,7 @@ const geist = Geist({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "spatial-probe",
   description:
-    "An instrument for probing what a spatial representation stores — and whether it is queryable and trustworthy enough to act on.",
+    "An instrument for probing what a spatial representation stores, and whether it is queryable and trustworthy enough to act on.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

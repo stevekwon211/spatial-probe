@@ -37,7 +37,7 @@ function Legend({ obstacles }: { obstacles: Obstacle[] }) {
   if (!present.length) return null;
   return (
     <div className="mb-3 rounded-lg border border-white/10 bg-white/[0.03] p-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">classes — box-only sees ~vehicles + peds; occquery sees all</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">box-only sees vehicles and peds, occquery sees all</div>
       <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
         {present.map((c) => (
           <div key={c} className="flex items-center gap-1.5">
@@ -233,8 +233,7 @@ export function OccqueryViewer() {
         </div>
         <div className="flex flex-1 items-center justify-center px-6 text-center">
           <p className="text-xs leading-relaxed text-white/40">
-            Query scenes in natural language — &quot;find where free width drops below 1&nbsp;m&quot;. occquery turns the
-            question into geometric predicates and jumps you to the frames. Coming soon.
+            Ask in plain language. occquery turns the question into geometric predicates and jumps to the matching frames.
           </p>
         </div>
         <div className="border-t border-white/10 p-3">
