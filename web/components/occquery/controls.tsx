@@ -90,6 +90,7 @@ export function ControlPanel() {
         <ToggleRow label="Ego vehicle" k="showEgo" kbd="E" />
         <ToggleRow label="Heading" k="showForward" />
         <ToggleRow label="Ground grid" k="showGrid" kbd="G" />
+        <ToggleRow label="Reachable free-space" k="showReachable" />
         <ToggleRow label="Wireframe" k="wireframe" />
         <ToggleRow label="Stats (FPS)" k="showStats" />
       </Section>

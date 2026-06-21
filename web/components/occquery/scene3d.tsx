@@ -8,6 +8,15 @@ import { CAMERA_PRESETS, useViewer, type ColorMode } from "./store";
 
 export type Obstacle = [number, number, number, number]; // ego frame: forward, left, up, class
 
+export type ReachableField = {
+  forward_min: number;
+  lateral_min: number;
+  resolution: number;
+  ego_cell: [number, number];
+  shape: [number, number]; // [NF, NL]
+  mask: number[]; // flattened (NF, NL) row-major; 1 = reachable free-space
+};
+
 type Ranges = { minU: number; maxU: number; maxF: number; maxL: number };
 
 // Pre-allocated instance budget; mesh.count is set per frame so we never re-mount on frame change.
@@ -79,6 +88,42 @@ function Voxels({ obstacles, size }: { obstacles: Obstacle[]; size: number }) {
   );
 }
 
+// The reachable free-space the predicates measure, rendered as thin ground tiles.
+// This is the VISUAL of H1 (rendered == measured field), not a measurement-accuracy claim.
+function ReachableOverlay({ field }: { field: ReachableField }) {
+  const ref = useRef<THREE.InstancedMesh>(null!);
+  useEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    const [nf, nl] = field.shape;
+    const res = field.resolution;
+    const tile = res * 0.92;
+    let n = 0;
+    for (let fi = 0; fi < nf; fi++) {
+      for (let li = 0; li < nl; li++) {
+        if (field.mask[fi * nl + li]) {
+          const forward = field.forward_min + fi * res;
+          const lateral = field.lateral_min + li * res;
+          m.makeScale(tile, 0.02, tile);
+          m.setPosition(forward, 0.02, lateral); // three (x,y,z) = (forward, up, left)
+          mesh.setMatrixAt(n, m);
+          n++;
+        }
+      }
+    }
+    mesh.count = n;
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [field]);
+  const max = field.shape[0] * field.shape[1];
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, max]}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color="#cbd5e1" transparent opacity={0.18} toneMapped={false} depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
 function Ego({ w, l, h }: { w: number; l: number; h: number }) {
   const egoOpacity = useViewer((s) => s.egoOpacity);
   const wireframe = useViewer((s) => s.wireframe);
@@ -113,17 +158,20 @@ export function Scene3D({
   obstacles,
   ego,
   voxelSize,
+  reachable,
   onGl,
 }: {
   obstacles: Obstacle[];
   ego: { width: number; length: number; height: number };
   voxelSize: number;
+  reachable?: ReachableField | null;
   onGl: (gl: THREE.WebGLRenderer) => void;
 }) {
   const showVoxels = useViewer((s) => s.showVoxels);
   const showEgo = useViewer((s) => s.showEgo);
   const showForward = useViewer((s) => s.showForward);
   const showGrid = useViewer((s) => s.showGrid);
+  const showReachable = useViewer((s) => s.showReachable);
   const showStats = useViewer((s) => s.showStats);
   const projection = useViewer((s) => s.projection);
 
@@ -139,6 +187,7 @@ export function Scene3D({
       <directionalLight position={[10, 20, 10]} intensity={0.8} />
       {showEgo && <Ego w={ego.width} l={ego.length} h={ego.height} />}
       {showVoxels && <Voxels obstacles={obstacles} size={voxelSize} />}
+      {showReachable && reachable && <ReachableOverlay field={reachable} />}
       {showForward && <Line points={[[0, 0.2, 0], [8, 0.2, 0]]} color="#ef4444" lineWidth={3} />}
       {showGrid && (
         <Grid args={[80, 80]} cellSize={2} sectionSize={10} infiniteGrid fadeDistance={60} cellColor="#222" sectionColor="#333" />

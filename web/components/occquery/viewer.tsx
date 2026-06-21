@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import Link from "next/link";
 import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
-import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Obstacle } from "./scene3d";
+import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Obstacle, type ReachableField } from "./scene3d";
 import { ControlPanel } from "./controls";
 import { useViewer } from "./store";
 import { GlassPanel } from "./glass";
@@ -68,9 +68,10 @@ export function OccqueryViewer() {
   const [meta, setMeta] = useState<SceneMeta | null>(null);
   const [frameIdx, setFrameIdx] = useState(0);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  const [reachable, setReachable] = useState<ReachableField | null>(null);
   const [copied, setCopied] = useState(false);
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cache = useRef<Map<string, Obstacle[]>>(new Map());
+  const cache = useRef<Map<string, { obstacles: Obstacle[]; reachable: ReachableField | null }>>(new Map());
 
   const playing = useViewer((s) => s.playing);
   const speed = useViewer((s) => s.speed);
@@ -94,16 +95,17 @@ export function OccqueryViewer() {
     if (!meta) return;
     const t = meta.frames[frameIdx]?.t;
     if (t === undefined) return;
-    const load = (tt: number): Promise<Obstacle[]> => {
+    const load = (tt: number): Promise<{ obstacles: Obstacle[]; reachable: ReachableField | null }> => {
       const key = `${scene}/${tt}`;
       const hit = cache.current.get(key);
       if (hit) return Promise.resolve(hit);
       return fetch(`${BASE}/${scene}/f${tt}.json`).then((r) => r.json()).then((d) => {
-        cache.current.set(key, d.obstacles);
-        return d.obstacles as Obstacle[];
+        const frame = { obstacles: d.obstacles as Obstacle[], reachable: (d.reachable ?? null) as ReachableField | null };
+        cache.current.set(key, frame);
+        return frame;
       });
     };
-    load(t).then(setObstacles).catch(() => setObstacles([]));
+    load(t).then((f) => { setObstacles(f.obstacles); setReachable(f.reachable); }).catch(() => { setObstacles([]); setReachable(null); });
     const nt = meta.frames[frameIdx + 1]?.t;
     if (nt !== undefined) load(nt).catch(() => {});
   }, [meta, frameIdx, scene]);
@@ -176,7 +178,7 @@ export function OccqueryViewer() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#080808]">
-      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} onGl={(gl) => (glRef.current = gl)} />}
+      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} onGl={(gl) => (glRef.current = gl)} />}
 
       {/* top-left — context + view controls */}
       <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">

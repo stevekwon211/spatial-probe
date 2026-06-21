@@ -27,6 +27,7 @@ from probe.adapters.occ3d import _ordered_tokens, load_scene  # noqa: E402
 from probe.grid import OCCUPIED  # noqa: E402
 from probe.predicates.clearance import lateral_clearance  # noqa: E402
 from probe.predicates.freepath import free_along_ego_path, min_free_width_along_path  # noqa: E402
+from probe.predicates.reachable import reachable_free_field  # noqa: E402
 
 _DATA = _HERE.parents[1] / "data"
 _OUT = _HERE.parents[1] / "web" / "public" / "data" / "occquery"
@@ -70,7 +71,21 @@ def main() -> None:
         for i, t in enumerate(scene.times()):
             semantics = np.load(_DATA / si[tokens[i]]["gt_path"])["semantics"]
             grid, ego, obstacles, n_band, n_total = _band_obstacles(scene, t, semantics)
-            (_OUT / name / f"f{t}.json").write_text(json.dumps({"t": t, "obstacles": obstacles}))
+            # the reachable free-space field the predicates measure -- exported so the web overlay
+            # renders the SAME field (visual-data agreement = H1 visual, not measurement accuracy)
+            rf = reachable_free_field(grid, ego, 2.0, min_cluster_voxels=2)
+            (_OUT / name / f"f{t}.json").write_text(json.dumps({
+                "t": t,
+                "obstacles": obstacles,
+                "reachable": {
+                    "forward_min": round(float(rf.forward_min), 3),
+                    "lateral_min": round(float(rf.lateral_min), 3),
+                    "resolution": round(float(rf.resolution), 3),
+                    "ego_cell": [int(rf.ego_cell[0]), int(rf.ego_cell[1])],
+                    "shape": [int(rf.reachable.shape[0]), int(rf.reachable.shape[1])],
+                    "mask": rf.reachable.astype(np.uint8).flatten().tolist(),
+                },
+            }))
             metas.append({
                 "t": t,
                 "speed": round(float(ego.speed), 2),
