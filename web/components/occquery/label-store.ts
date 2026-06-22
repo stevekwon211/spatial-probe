@@ -31,6 +31,24 @@ function newSession(): string {
   return `sess-${Math.floor(performance.now())}-${Math.round(Math.random() * 1e9)}`;
 }
 
+// Verdicts persist to localStorage on EVERY change, keyed by pool, so a reload / navigate / crash
+// never loses labeling work (the prior memory-only store lost a full pass). "data changed => saved"
+// is a property of the store, not a "remember to click Save" checklist.
+const vkey = (poolId: string) => `occquery-verdicts-${poolId}`;
+
+function persistVerdicts(poolId: string, verdicts: Record<number, VerdictRecord>): void {
+  if (typeof window !== "undefined") window.localStorage.setItem(vkey(poolId), JSON.stringify(verdicts));
+}
+
+function loadVerdicts(poolId: string): Record<number, VerdictRecord> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(vkey(poolId)) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
 type LabelStore = {
   pool: Pool | null;
   sessionId: string;
@@ -58,7 +76,13 @@ export const useLabel = create<LabelStore>((set, get) => ({
     if (typeof window !== "undefined") window.localStorage.setItem("occquery-label-lang", lang);
     set({ lang });
   },
-  setPool: (p) => set({ pool: p, current: 0, verdicts: {}, revealed: false }),
+  setPool: (p) => {
+    // rehydrate any prior verdicts for this pool, and resume at the first un-voted task
+    const restored = loadVerdicts(p.pool_id);
+    const firstOpen = p.tasks.findIndex((t) => !restored[t.task_id]);
+    const current = firstOpen === -1 ? 0 : firstOpen;
+    set({ pool: p, current, verdicts: restored, revealed: Boolean(restored[p.tasks[current]?.task_id]) });
+  },
   vote: (verdict, frameSeen) => {
     const { pool, current, sessionId } = get();
     if (!pool) return;
@@ -71,7 +95,11 @@ export const useLabel = create<LabelStore>((set, get) => ({
       timestamp: new Date().toISOString(),
       session_id: sessionId,
     };
-    set((s) => ({ verdicts: { ...s.verdicts, [task.task_id]: rec }, revealed: true }));
+    set((s) => {
+      const verdicts = { ...s.verdicts, [task.task_id]: rec };
+      persistVerdicts(pool.pool_id, verdicts);
+      return { verdicts, revealed: true };
+    });
   },
   undo: () => {
     const { pool, current } = get();
@@ -80,6 +108,7 @@ export const useLabel = create<LabelStore>((set, get) => ({
     set((s) => {
       const v = { ...s.verdicts };
       delete v[task.task_id];
+      persistVerdicts(pool.pool_id, v);
       return { verdicts: v, revealed: false };
     });
   },

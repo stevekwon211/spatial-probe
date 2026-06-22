@@ -129,9 +129,8 @@ export function Labeler() {
 
   const onVote = useCallback((v: Verdict) => vote(v, frameIdx), [vote, frameIdx]);
 
-  const save = useCallback(async () => {
+  const flush = useCallback(async (records: object[], manual: boolean) => {
     if (!pool) return;
-    const records = Object.values(verdicts);
     try {
       const res = await fetch("/api/labels", {
         method: "POST",
@@ -139,11 +138,21 @@ export function Labeler() {
         body: JSON.stringify({ pool_id: pool.pool_id, session_id: sessionId, verdicts: records }),
       });
       const j = await res.json();
-      setSaveMsg(res.ok ? `saved ${j.written ?? records.length} → ${j.path ?? "labels/"}` : `save failed: ${j.error ?? res.status}`);
+      setSaveMsg(res.ok ? `${manual ? "saved" : "auto-saved"} ${j.written ?? records.length} → ${j.path ?? "labels/"}` : `save failed: ${j.error ?? res.status}`);
     } catch (e) {
-      setSaveMsg(`save failed (is the dev server running?): ${String(e)}`);
+      setSaveMsg(`save failed (dev server down?): ${String(e)}`);
     }
-  }, [pool, verdicts, sessionId]);
+  }, [pool, sessionId]);
+
+  const save = useCallback(() => flush(Object.values(verdicts), true), [flush, verdicts]);
+
+  // Auto-save to disk on every verdict change (localStorage already persisted it instantly in the
+  // store; this keeps labels/<pool>.jsonl current even if the browser closes). No "remember to Save".
+  const nVerdicts = Object.keys(verdicts).length;
+  useEffect(() => {
+    if (pool && nVerdicts > 0) flush(Object.values(verdicts), false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nVerdicts]);
 
   // Keyboard: arrows step frames; Y/N/S vote (blind); Enter next; U undo (revealed).
   useEffect(() => {
