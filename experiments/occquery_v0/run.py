@@ -23,26 +23,12 @@ sys.path.insert(0, str(_HERE.parents[1] / "src"))  # make `probe` importable as 
 sys.path.insert(0, str(_HERE))                      # make `synthetic` importable
 
 from probe.grid import UnknownPolicy
+from probe.metrics import prf1 as _prf1  # single P/R/F1 definition lives in probe.metrics now
 from probe.query_spec import load_queries
 from probe.retrieval import retrieved
 from synthetic import GROUND_TRUTH, SCENES
 
 _SEED = 0  # synthetic geometry is deterministic; recorded for provenance
-
-
-def _prf1(ret: set[str], truth: set[str]) -> dict:
-    ret, truth = set(ret), set(truth)
-    tp = len(ret & truth)
-    precision = tp / len(ret) if ret else 1.0
-    recall = tp / len(truth) if truth else 1.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
-    return {
-        "precision": round(precision, 3),
-        "recall": round(recall, 3),
-        "f1": round(f1, 3),
-        "false_positives": sorted(ret - truth),
-        "false_negatives": sorted(truth - ret),
-    }
 
 
 def _git_commit() -> str:

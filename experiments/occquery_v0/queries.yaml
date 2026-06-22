@@ -1,4 +1,4 @@
-# Hand-compiled NL -> predicate queries for occquery_v0, validated by probe.query_spec.
+# Pre-registered NL -> predicate queries for occquery (the M4 query set), validated by probe.query_spec.
 #
 # Fields (see probe/query_spec.py for the schema):
 #   backend:           occupancy | tracking   (tracking = the box-only baseline)
@@ -11,25 +11,181 @@
 #                      atomic_functions.py, which has no dense-occupancy / free-space primitive).
 #
 # Predicate expressions are evaluated by probe.query_dsl.safe_eval (AST whitelist), never eval().
-# Expand toward ~20 occupancy queries before M4.
+# Callable names (retrieval.namespace): lateral_clearance, centerline_lateral_distance,
+# free_along_ego_path(horizon=), min_free_width_along_path(horizon=), ego_speed, ego_width,
+# distance_to_nearest_object(object_class=). No arithmetic operators (safe_eval rejects + - * /).
+#
+# PRE-REGISTRATION (occquery H1/H3). This is the sealed query set, committed BEFORE any val run so a
+# post-hoc change (HARKing) shows in git history. 20 queries: 16 occupancy (clearance/centerline 3 each,
+# free_path/corridor 5 each) + 4 box-baseline fairness controls. Designed + adversarially verified
+# 2026-06-22; thresholds are physically-motivated round values, NONE tuned to data (no val data seen).
+# Every threshold/horizon is a pre-registered knob reported later as a CURVE, never a movable cutoff.
 #
 # SCOPE (2026-06-21, PLAN s4): these are GEOMETRIC MEASUREMENTS over occupancy, NOT danger verdicts.
-# "tight_clearance_at_speed" returns frames where the side gap < 0.5 m AND the ego is fast -- both
-# static frame facts. Whether that is a dangerous near-miss (vs a wall the ego safely clears, vs a
-# lead car) needs relative motion over time = the dynfield experiment, not occquery. occquery is
-# judged on MEASUREMENT accuracy (does free-width / clearance match a geometric oracle), never on
-# retrieving "danger". The query names below read as situations for readability, but each is just a
-# threshold on a measured quantity.
+# Each predicate is a threshold on a single-frame measured fact (a side gap, a corridor width, a path
+# blockage, a box distance). Whether such a fact is a dangerous near-miss -- a wall the ego safely
+# tracks vs a lead car it follows, a stationary object vs one that cut in -- depends on relative motion
+# over time, which is the dynfield experiment, not occquery. occquery is judged on MEASUREMENT accuracy
+# (H3) and expressivity (H1), never on retrieving "danger". The names read as situations for
+# readability; each is just a threshold on a measured quantity.
 
 queries:
-  - id: tight_clearance_at_speed
-    nl: "ego passed within 0.5 m of something solid while going faster than 30 km/h"
+  # --- clearance family: physical free gap from the ego BODY SIDE to the nearest occupied surface ---
+  - id: grazing_side_clearance
+    nl: "ego passed within 0.3 m of something solid on its side in some frame"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "lateral_clearance(scene, t) < 0.3"
+    refav_expressible: false
+    rationale: "lateral_clearance is the body-side free gap to the nearest OCCUPIED voxel surface. The obstacle abeam may be a wall, curb, or debris with no tracked cuboid, so RefAV's box+map set (cuboid pose/size/yaw + velocity + map polygons; no free-space primitive in the 33-function set) cannot see it. Tightest tier (0.3 m) anchoring the low end of the side-gap curve."
+
+  - id: tight_clearance_at_speed  # stable id: GROUND_TRUTH key (synthetic.py), gallery, docs reference it
+    nl: "ego had under half a meter of side clearance while going faster than 30 km/h"
     backend: occupancy
     status: implemented
     scope: any
     predicate: "lateral_clearance(scene, t) < 0.5 and ego_speed(scene, t) > 8.33"
     refav_expressible: false
-    rationale: "clearance to the nearest occupied space is not a box function; the obstacle may be a wall/debris/curb with no object box"
+    rationale: "Body-side dense-occupancy clearance (no cuboid analog: the nearest occupied space may be an unboxed wall/curb) AND an ego-speed gate. ego_speed alone is box-expressible (cuboid velocity), but the conjunction with the occupancy term is non-identifiable under box+map. 8.33 m/s = 30 km/h is a pre-registered urban-speed knob; 0.5 m is the shared cross-query clearance tier."
+
+  - id: moderate_side_clearance_at_speed
+    nl: "ego had less than 1 m of side clearance while going faster than 30 km/h"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "lateral_clearance(scene, t) < 1.0 and ego_speed(scene, t) > 8.33"
+    refav_expressible: false
+    rationale: "Same body-side clearance measurement at the looser 1.0 m tier with the 30 km/h gate, forming a clearance-threshold curve (0.3 / 0.5 / 1.0 m) rather than one magic cutoff. The clearance term has no cuboid analog; the conjunction stays non-identifiable under box+map."
+
+  - id: tight_side_clearance
+    nl: "ego had under half a meter of side clearance in some frame, at any speed"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "lateral_clearance(scene, t) < 0.5"
+    refav_expressible: false
+    rationale: "The 0.5 m body-side gap with NO speed gate -- the speed-free twin of tight_clearance_at_speed, so the clearance curve is sampled both with and without the urban-speed context. Free-gap-to-nearest-occupied-surface has no cuboid analog (the abeam obstacle may be an unboxed wall/curb), so it stays non-identifiable under RefAV's box+map set."
+
+  - id: moderate_side_clearance
+    nl: "ego had less than 1 m of side clearance in some frame, at any speed"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "lateral_clearance(scene, t) < 1.0"
+    refav_expressible: false
+    rationale: "The 1.0 m body-side gap with no speed gate, completing the speed-free clearance curve (0.3 / 0.5 / 1.0 m) alongside the speed-gated tier. Body-side free gap to the nearest occupied surface is a free-space quantity with no box analog; non-identifiable under box+map."
+
+  # --- centerline family: min |lateral| from the ego path centerline to the nearest obstacle ahead ---
+  - id: centerline_obstacle_grazing
+    nl: "an obstacle ahead sat within 0.3 m of the ego's path centerline in some frame"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "centerline_lateral_distance(scene, t) < 0.3"
+    refav_expressible: false
+    rationale: "centerline_lateral_distance is min |lateral| from the path centerline to the nearest occupied space ahead. The nearest obstacle may be unboxed free-space content (a barrier, a wall corner, debris) with no cuboid, and RefAV's set has no free-space primitive. Distinct from lateral_clearance: centerline-to-obstacle ahead, not body-side gap abeam. 0.3 m is the tight low end of the centerline curve."
+
+  - id: centerline_obstacle_tight
+    nl: "an obstacle ahead sat within 0.5 m of the ego's path centerline in some frame"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "centerline_lateral_distance(scene, t) < 0.5"
+    refav_expressible: false
+    rationale: "Same centerline measurement at the 0.5 m tier (the shared cross-query clearance line), tracing the threshold curve with centerline_obstacle_grazing rather than fixing one cutoff. Non-identifiable under box+map because the nearest obstacle ahead need not be a tracked cuboid and the set has no free-space primitive."
+
+  - id: centerline_obstacle_moderate_at_urban_speed
+    nl: "an obstacle ahead sat within 1 m of the path centerline while the ego was moving faster than 18 km/h"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "centerline_lateral_distance(scene, t) < 1.0 and ego_speed(scene, t) > 5.0"
+    refav_expressible: false
+    rationale: "Centerline free-space distance (no box analog) AND a lower 5.0 m/s = 18 km/h urban-speed context (distinct from the 8.33 m/s clearance gate), diversifying the (threshold x context) cell. The conjunction with the occupancy term is non-identifiable under box+map; both thresholds are pre-registered knobs."
+
+  - id: centerline_obstacle_moderate
+    nl: "an obstacle ahead sat within 1 m of the ego's path centerline in some frame, at any speed"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "centerline_lateral_distance(scene, t) < 1.0"
+    refav_expressible: false
+    rationale: "The 1.0 m centerline tier with NO speed gate -- the speed-free point completing the centerline threshold curve (0.3 / 0.5 / 1.0 m). centerline_lateral_distance (min |lateral| to nearest occupied space ahead) is non-identifiable under box+map: the nearest obstacle ahead need not be a tracked cuboid and the set has no free-space primitive."
+
+  - id: centerline_obstacle_tight_at_speed
+    nl: "an obstacle ahead sat within 0.5 m of the path centerline while the ego was moving faster than 30 km/h"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "centerline_lateral_distance(scene, t) < 0.5 and ego_speed(scene, t) > 8.33"
+    refav_expressible: false
+    rationale: "The 0.5 m centerline measurement paired with the 8.33 m/s = 30 km/h gate -- the high-speed twin of centerline_obstacle_tight, diversifying the (threshold x speed) cell against centerline_obstacle_moderate_at_urban_speed (1.0 m at 18 km/h). The centerline free-space term has no cuboid analog; the conjunction is non-identifiable under box+map."
+
+  # --- free_path family: is the straight-ahead reachable corridor clear over a forward horizon ---
+  - id: free_path_blocked_within_body_length
+    nl: "the ego's body footprint alone is already blocked over the next half-meter of forward reach"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "not free_along_ego_path(scene, t, horizon=0.5)"
+    refav_expressible: false
+    rationale: "Free-space path blockage is a property of empty space, not any object box; at horizon=0.5 the swept corridor is essentially the body footprint plus a short reach, so the blocker can be an unboxed wall/curb/debris. Box+map observables are identical with or without an unboxed obstacle in that footprint. Shortest horizon, near end of the free-path reach sweep."
+
+  - id: free_path_is_blocked  # stable id: gallery, tests, docs/h3-real-data-findings reference it
+    nl: "the ego's straight-ahead path was blocked by an unboxed free-space obstruction within a one-second reach"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "not free_along_ego_path(scene, t, horizon=1.0)"
+    refav_expressible: false
+    rationale: "Reachable-corridor blockage at the standard 1.0 s horizon. The obstruction may have no cuboid (overhanging load, construction barrier, free-space wall); two RefAV-identical scenes (same boxes, map, velocities) can differ only by an unboxed obstruction inside the reach. min_cluster_voxels=2 (retrieval.namespace) drops lone-voxel sensor noise."
+
+  - id: free_path_blocked_at_two_second_horizon
+    nl: "the ego's straight-ahead path was blocked somewhere within a two-second constant-velocity reach"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "not free_along_ego_path(scene, t, horizon=2.0)"
+    refav_expressible: false
+    rationale: "Reachable-corridor blockage at a longer 2.0 s horizon -- still a property of empty space, the obstruction possibly unboxed. Extends the free-path reach sweep (0.5 / 1.0 / 2.0 / 4.0 s); the horizon is a pre-registered reach knob, not a danger cutoff."
+
+  - id: free_path_blocked_at_long_range_high_speed
+    nl: "the ego was traveling faster than 30 km/h while its straight-ahead path was blocked within a four-second reach"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "ego_speed(scene, t) > 8.33 and not free_along_ego_path(scene, t, horizon=4.0)"
+    refav_expressible: false
+    rationale: "Pairs an instantaneous ego-speed scalar (box-expressible) with a free-space blockage at a 4.0 s reach (NOT box-expressible). Because one conjunct is an occupancy term with no cuboid equivalent, the query is non-identifiable under box+map. A fast ego sweeps ~33 m at horizon=4.0, where unboxed road furniture / free-space walls are most likely outside the tracked-object set."
+
+  - id: free_path_blocked_or_side_clearance_tight
+    nl: "either the ego's near path was blocked within one meter or it passed within half a meter of something solid on its side"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "not free_along_ego_path(scene, t, horizon=1.0) or lateral_clearance(scene, t) < 0.5"
+    refav_expressible: false
+    rationale: "An OR of two distinct occupancy measurements: a frontal free-space blockage (horizon=1.0) OR a tight physical side gap. Both disjuncts are free-space/clearance quantities with no cuboid analog (the blocker or the abeam surface may be unboxed), so the disjunction is non-identifiable under RefAV's observation set. 0.5 m matches the side-gap knob; horizon=1.0 the near-path reach."
+
+  # --- corridor family: narrowest two-sided free width along the path (min_free_width_along_path) ---
+  - id: corridor_pinches_fully_shut
+    nl: "the forward free corridor pinched all the way shut somewhere within a 4 m look-ahead"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "min_free_width_along_path(scene, t, horizon=4.0) == 0.0"
+    refav_expressible: false
+    rationale: "min_free_width returns 0.0 only when the centerline hits a frontal obstacle inside a two-sided walled corridor -- a free-space blockage of empty space, not the position of any box. RefAV's set has no dense-occupancy / free-space primitive, so it cannot read 'the gap between the surfaces on either side of my path went to zero here'. Long 4.0 s horizon catches a far-ahead pinch the short-horizon free-path queries miss."
+
+  - id: near_corridor_below_vehicle_width
+    nl: "within just 1 m of look-ahead the two-sided corridor ahead was already narrower than the car itself"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "0 < min_free_width_along_path(scene, t, horizon=1.0) < ego_width(scene)"
+    refav_expressible: false
+    rationale: "Chained compare against ego_width: the corridor is open (>0, genuinely two-sided, not a frontal blockage) yet its surface-to-surface width is below the ego's own width, so the body cannot fit. Free-space width between two (possibly unboxed) surfaces is not in RefAV's box+map set. SHORT 1.0 s horizon (fires only when the pinch is already close); ego_width is the physically-right self-relative 'does it fit' yardstick."
 
   - id: corridor_narrows_below_vehicle_width
     nl: "the only free path ahead narrowed to less than the car's width"
@@ -38,17 +194,27 @@ queries:
     scope: any
     predicate: "0 < min_free_width_along_path(scene, t, horizon=2.0) < ego_width(scene)"
     refav_expressible: false
-    rationale: "free-space width is a property of empty space, not of any object box"
+    rationale: "Free-space corridor width below the ego's own width at the standard 2.0 s horizon -- the body cannot fit. Width between two (possibly unboxed) surfaces has no RefAV primitive. The ego_width chained compare is the self-relative yardstick. Mid horizon of the ego-width horizon sweep (1.0 / 2.0 / 4.0 s)."
 
-  - id: free_path_is_blocked
-    nl: "the ego's straight-ahead path was blocked by an (unboxed) free-space obstruction in some frame"
+  - id: far_corridor_below_vehicle_width
+    nl: "even looking 4 m ahead the corridor stayed open but its narrowest point was below the car's own width"
     backend: occupancy
     status: implemented
     scope: any
-    predicate: "not free_along_ego_path(scene, t, horizon=1.0)"
+    predicate: "0 < min_free_width_along_path(scene, t, horizon=4.0) < ego_width(scene)"
     refav_expressible: false
-    rationale: "free-space path blockage is a property of empty space, not any object box. The temporal version (blocked->clears) and the relative-motion 'it actually pulled away' check are dynamics, deferred to the dynfield experiment -- occquery stays static per PLAN s0. min_cluster_voxels=2 (retrieval.namespace) drops lone-voxel sensor noise."
+    rationale: "Same self-relative ego_width compare at the LONG 4.0 s horizon (reach ~22 m at 5 m/s), surveying far-ahead narrowing the shorter horizons never reach. With near_/corridor_narrows_ this completes a clean three-horizon sweep at the fixed ego-width threshold. Free-corridor width is not in RefAV's box+map set."
 
+  - id: corridor_below_half_meter
+    nl: "the free corridor along the next 2 m of path narrowed to under half a meter -- effectively impassable"
+    backend: occupancy
+    status: implemented
+    scope: any
+    predicate: "0 < min_free_width_along_path(scene, t, horizon=2.0) < 0.5"
+    refav_expressible: false
+    rationale: "Absolute-literal 0.5 m threshold at the 2.0 s horizon, distinct from the ego_width-relative corridor queries -- 0.5 m is below which the corridor is impassable to almost any wheeled body, matching the 0.5 m clearance knob used across the set. Still open (>0), a genuine narrow two-sided gap (not the ==0.0 frontal blockage). Free-space width is outside RefAV's expressivity."
+
+  # --- box_baseline: fairness controls the box backend SHOULD win (pure distance_to_nearest_object) ---
   - id: near_a_tracked_vehicle
     nl: "ego came within 2 m of another vehicle"
     backend: tracking
@@ -56,4 +222,31 @@ queries:
     scope: any
     predicate: "distance_to_nearest_object(scene, t, object_class='vehicle') < 2.0"
     refav_expressible: true
-    rationale: "fairness control: both representations should answer this, and the box backend wins on ease; not part of the occupancy retrieval set"
+    rationale: "A pure object-box query (distance to nearest tracked vehicle cuboid), expressed directly by RefAV's box+map set via cuboid translation + a min-distance reduction -- so refav_expressible is true and the backend is tracking. Fairness control the box backend SHOULD win; not part of the occupancy retrieval set. Pairs with the 5.0 m point to report the same measurement at two pre-registered cutoffs."
+
+  - id: within_one_carlength_of_a_tracked_vehicle
+    nl: "ego was within one car length (5 m) of a tracked vehicle box in some frame"
+    backend: tracking
+    status: baseline_only
+    scope: any
+    predicate: "distance_to_nearest_object(scene, t, object_class='vehicle') < 5.0"
+    refav_expressible: true
+    rationale: "Fairness control and a second point on the vehicle-distance threshold curve (2.0 m vs 5.0 m ~ one car length), reporting the same box measurement at two pre-registered cutoffs. RefAV expresses ego-to-nearest-vehicle distance directly from cuboid translations; occupancy adds no power."
+
+  - id: near_a_tracked_pedestrian
+    nl: "ego came within 1.5 m of a tracked pedestrian box in some frame"
+    backend: tracking
+    status: baseline_only
+    scope: any
+    predicate: "distance_to_nearest_object(scene, t, object_class='pedestrian') < 1.5"
+    refav_expressible: true
+    rationale: "Fairness control: a pedestrian is always a tracked cuboid in RefAV's set, so cuboid-translation + min-distance expresses ego-to-nearest-pedestrian distance directly; the occupancy backend has no advantage. Distinct from the vehicle baselines by class and from the bicycle control by threshold (1.5 m, a person's standoff buffer)."
+
+  - id: near_a_tracked_bicycle
+    nl: "ego came within 1 m of a tracked bicycle box in some frame"
+    backend: tracking
+    status: baseline_only
+    scope: any
+    predicate: "distance_to_nearest_object(scene, t, object_class='bicycle') < 1.0"
+    refav_expressible: true
+    rationale: "Fairness control: a bicycle is a labeled cuboid in RefAV, so ego-to-nearest-bicycle distance is a min over cuboid translations -- box-only expresses it exactly. 1.0 m matches the ~1 m minimum safe-passing gap many jurisdictions codify for cyclists. Exists so both representations answer a shared query and the box side wins on ease, keeping the H1 comparison honest."

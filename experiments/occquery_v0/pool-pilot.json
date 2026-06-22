@@ -1,0 +1,124 @@
+{
+  "pool_id": "pilot",
+  "sealed_at": "2026-06-22T11:30:00Z",
+  "is_pilot": true,
+  "queries_sha256": "204ff53b5d0d03806e5d4a5a338927c30e6e97c241b591add76c28b21dd423e6",
+  "occ3d_note": "Occ3D-nuScenes dense GT (mask=none); unknown~0. Scoring policy = FREE.",
+  "scoring_policy": "free",
+  "query_ids": [
+    "tight_clearance_at_speed",
+    "free_path_is_blocked",
+    "corridor_narrows_below_vehicle_width"
+  ],
+  "n_scenes": 19,
+  "n_tasks": 21,
+  "shuffle_seed": 0,
+  "tasks": [
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0011",
+      "task_id": 0
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0028",
+      "task_id": 1
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0020",
+      "task_id": 2
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0022",
+      "task_id": 3
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0036",
+      "task_id": 4
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0001",
+      "task_id": 5
+    },
+    {
+      "query_id": "corridor_narrows_below_vehicle_width",
+      "scene_id": "scene-0028",
+      "task_id": 6
+    },
+    {
+      "query_id": "corridor_narrows_below_vehicle_width",
+      "scene_id": "scene-0026",
+      "task_id": 7
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0014",
+      "task_id": 8
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0012",
+      "task_id": 9
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0004",
+      "task_id": 10
+    },
+    {
+      "query_id": "corridor_narrows_below_vehicle_width",
+      "scene_id": "scene-0036",
+      "task_id": 11
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0007",
+      "task_id": 12
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0008",
+      "task_id": 13
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0006",
+      "task_id": 14
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0031",
+      "task_id": 15
+    },
+    {
+      "query_id": "tight_clearance_at_speed",
+      "scene_id": "scene-0025",
+      "task_id": 16
+    },
+    {
+      "query_id": "corridor_narrows_below_vehicle_width",
+      "scene_id": "scene-0023",
+      "task_id": 17
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0003",
+      "task_id": 18
+    },
+    {
+      "query_id": "corridor_narrows_below_vehicle_width",
+      "scene_id": "scene-0017",
+      "task_id": 19
+    },
+    {
+      "query_id": "free_path_is_blocked",
+      "scene_id": "scene-0033",
+      "task_id": 20
+    }
+  ],
+  "honest_scope": "Human-vs-code consistency on the SAME Occ3D data (different algorithm, same data source) -- NOT a different-modality external oracle. H1 stays the sole headline."
+}

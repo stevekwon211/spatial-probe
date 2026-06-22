@@ -18,7 +18,7 @@ Python core (from repo root):
 ```sh
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"                 # numpy, scipy, pyyaml, pytest
-python -m pytest                        # 76 tests (~1.5s), no data needed
+python -m pytest                        # full suite (~1.5s), no data needed (count drifts; cite the command, not a frozen number)
 python -m pytest --collect-only -q      # cheap structural check
 pip install -e ".[data]"                # M2 only: adds nuscenes-devkit
 python experiments/occquery_v0/run.py   # synthetic smoke run -> results/ (NOT a result)
