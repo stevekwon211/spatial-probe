@@ -80,7 +80,7 @@ positive; "it's a lead car, not a wall" is a dynfield verdict.)
 
 - **Public dataset / substrate.** Argoverse 2 Sensor (RefAV scenario mining); Occ3D-nuScenes
   (occupancy substrate for the denotation arm).
-- **Public baseline.** RefAV's released function set (`refAV/atomic_functions.py`, ~33 cuboid +
+- **Public baseline.** RefAV's released function set (`refAV/atomic_functions.py`, 32 cuboid +
   velocity + map functions; no dense-occupancy / free-space primitive).
 - **External evaluator / protocol.** RefAV AV2 Scenario Mining on EvalAI, metric **HOTA-Temporal**
   (test split opened 2025-05-07).
@@ -94,7 +94,7 @@ positive; "it's a lead car, not a wall" is a dynfield verdict.)
   holds as an executable test. The full unit/integration suite passes (`python -m pytest -q`). *Not a scientific result.*
 - **Publishable.** On public Occ3D-nuScenes val: (a) expressivity separation — N safety queries
   expressible as occupancy predicates, ~0 in RefAV's released function set, checkable by anyone
-  against `atomic_functions.py` (**verified 2026-06-20: 0 free-space primitives in the 33-function
+  against `atomic_functions.py` (**verified 2026-06-20, re-verified 2026-06-22: 0 free-space primitives in the 32-function
   set**, see [expressivity-vs-refav.md](expressivity-vs-refav.md); oracle-free, the headline); (b) denotation P/R/F1 over a
   **released** occupancy field vs a LiDAR-derived oracle whose construction code + held-out scene
   IDs are released; (c) free-space predicates beat the best box-only approximation by **>= 20

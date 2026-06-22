@@ -12,6 +12,14 @@ a result. The active experiment is `experiments/occquery_v0` (occupancy-native p
 retrieval). Per-topic external anchors and the verification ledger are in
 `docs/benchmark-anchors.md`; the M2 real-data wiring contract is `docs/m2-adapter-contract.md`.
 
+**Result framing (do not re-inflate).** `experiments/occquery_v0/preregistration.md` is the sealed,
+authoritative version. **H1 (expressivity, oracle-free) is the SOLE headline and holds.** **H3
+(denotation correctness) is DEMOTED to an internal-consistency check** — the only oracle buildable
+here shares the predicate's data source (same Occ3D/LiDAR), so it is consistency, not external truth;
+no externally-validated P/R/F1 exists, and the camera-oracle probe is a same-vehicle cross-modality
+consistency check (AUC 0.798 INSUFFICIENT; forward agreement vacuous on the zero-positive mini). H2
+(leaderboard) is not started (Argoverse2 substrate mismatch). Treat any H3/H2 number as not-a-result.
+
 ## Build / test / run
 
 Python core (from repo root):

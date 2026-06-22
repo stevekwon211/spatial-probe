@@ -7,10 +7,11 @@ source so anyone can reproduce it — no model, no dataset, no oracle.
 ## What was checked
 
 RefAV's complete function set is the public `refAV/atomic_functions.py`
-([github.com/CainanD/RefAV](https://github.com/CainanD/RefAV), `main`) — the 33 functions the LLM is
-allowed to call to translate a natural-language query into executable code. Verified **2026-06-20**.
+([github.com/CainanD/RefAV](https://github.com/CainanD/RefAV), `main`) — the 32 functions the LLM is
+allowed to call to translate a natural-language query into executable code. Verified **2026-06-20**,
+re-verified **2026-06-22** (32 public functions, 0 free-space primitives).
 
-## The 33 functions, categorized
+## The 32 functions, categorized
 
 - **Object attributes**: `get_objects_of_category`, `is_category`, `is_color`, `within_camera_view`
 - **Motion**: `turning`, `changing_lanes`, `has_lateral_acceleration`, `accelerating`,

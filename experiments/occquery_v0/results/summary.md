@@ -28,7 +28,7 @@ Box-blind witness (`tests/test_expressivity.py`, 3 families: clearance / free-pa
 scenes with identical tracked-box + map + velocity observables differing only by an unboxed occupancy
 obstacle -- any function of the box+map channel MUST return the same answer; the occupancy predicate
 distinguishes them. This is non-identifiability under the box+map observable set, by construction, no
-oracle. RefAV's released 33-function set has 0 free-space primitives (`docs/expressivity-vs-refav.md`).
+oracle. RefAV's released 32-function set has 0 free-space primitives (`docs/expressivity-vs-refav.md`).
 
 The pre-registered query set is now **24 queries** (was 4), committed before any val run
 (`queries.yaml`, 2026-06-22): **20 occupancy** (5 each across clearance / centerline / free-path /

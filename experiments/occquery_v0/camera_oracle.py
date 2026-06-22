@@ -36,6 +36,7 @@ sys.path.insert(0, str(_HERE))
 
 from probe.adapters.occ3d import load_scene
 from probe.grid import UnknownPolicy
+from probe.predicates.freepath import free_along_ego_path
 from projection import IMG_H, IMG_W, Camera, cameras_for_frame, project_ego_points
 
 _DATA = _HERE.parents[1] / "data"
@@ -118,6 +119,57 @@ def calibrate(scenes, rng: np.random.Generator) -> dict:
             "median_road": float(np.median(neg)) if neg else float("nan")}
 
 
+def camera_freepath_block(gray: np.ndarray, cam: Camera, ego_height: float, reach: float,
+                          thr: float, step: float = 0.5, run: int = 3) -> float:
+    """Independent FORWARD free-path estimate from the camera, clean-provenance (geometry + image
+    evidence, NO learning, NO LiDAR). Walk the ego centerline on the GROUND plane (z=0) outward,
+    project each station to a pixel via the verified chain, read the patch evidence. The camera calls
+    the path BLOCKED at the first distance where a RUN of `run` consecutive stations all exceed `thr`
+    (a sustained structure on the centerline; a lone high patch is noise, not a wall). Returns that
+    forward distance, or math.inf if the centerline stays road-like to `reach`.
+
+    Aggregating along the ray is what rescues the borderline single-patch signal (AUC 0.798): a real
+    frontal obstacle blocks a contiguous run of centerline stations; per-patch noise does not."""
+    hits = 0
+    d = step
+    while d <= reach:
+        uv, depth, vis = project_ego_points(np.array([[d, 0.0, 0.0]]), cam)  # centerline, ground plane
+        if vis[0]:
+            e = patch_evidence(gray, uv[0, 0], uv[0, 1])
+            if e is not None:
+                hits = hits + 1 if e > thr else 0
+                if hits >= run:
+                    return float(d - (run - 1) * step)  # first station of the blocking run
+        d += step
+    return float("inf")
+
+
+def forward_crosscheck(scenes, thr: float) -> dict:
+    """Cross-modality FORWARD free-path consistency: occupancy free_along_ego_path (LiDAR) vs the
+    camera centerline-ray block (optical). Reports the 2x2 agreement -- a DIFFERENT-MODALITY check,
+    NOT external truth (same vehicle/timestamp). horizon 1.0 s; CAM_FRONT only (forward quantity)."""
+    ann = json.loads((_DATA / "annotations.json").read_text())
+    agree = {"free_free": 0, "blocked_blocked": 0, "occ_free_cam_blocked": 0, "occ_blocked_cam_free": 0}
+    n = 0
+    for sc in scenes:
+        si = ann["scene_infos"][sc.name]
+        toks = list(si)
+        for i in range(len(sc)):
+            grid, ego = sc.grid_at(i), sc.ego_at(i)
+            occ_free = free_along_ego_path(grid, ego, 1.0, min_cluster_voxels=2)
+            cam = cameras_for_frame(si[toks[i]])["CAM_FRONT"]
+            gray = _gray(np.asarray(Image.open(_DATA / "samples" / cam.img_path).convert("RGB"), float))
+            reach = ego.length / 2.0 + ego.speed * 1.0
+            cam_block = camera_freepath_block(gray, cam, ego.height, max(reach, 6.0), thr)
+            cam_free = not np.isfinite(cam_block)
+            key = ("free" if occ_free else "blocked") + "_" + ("free" if cam_free else "blocked")
+            agree[{"free_free": "free_free", "blocked_blocked": "blocked_blocked",
+                   "free_blocked": "occ_free_cam_blocked", "blocked_free": "occ_blocked_cam_free"}[key]] += 1
+            n += 1
+    agreement = (agree["free_free"] + agree["blocked_blocked"]) / n if n else float("nan")
+    return {"n_frames": n, "agreement_rate": agreement, **agree}
+
+
 def main() -> None:
     rng = np.random.default_rng(0)
     print(f"loading {len(MINI)} mini scenes (with boxes for calibration) ...", flush=True)
@@ -136,8 +188,22 @@ def main() -> None:
     out = _HERE / "results" / "camera_oracle_calibration.json"
     out.write_text(json.dumps(cal, indent=2) + "\n")
     print(f"  wrote {out}")
-    print("\n  Independence: different MODALITY (optical vs TOF) + ALGORITHM (image evidence vs EDT);")
-    print("  same vehicle/timestamp so MORE independent, not pristine. H1 stays the sole headline.")
+
+    # Step 1: FORWARD free-path cross-modality consistency (occupancy vs camera centerline-ray)
+    xc = forward_crosscheck(scenes, cal["threshold"])
+    print("\nFORWARD free-path cross-modality consistency (occupancy LiDAR vs camera optical):")
+    print(f"  {xc['n_frames']} frames | agreement = {xc['agreement_rate']:.3f}")
+    print(f"    both free: {xc['free_free']}  both blocked: {xc['blocked_blocked']}")
+    print(f"    occ-free/cam-blocked: {xc['occ_free_cam_blocked']}  occ-blocked/cam-free: {xc['occ_blocked_cam_free']}")
+    print("    (disagreements are the SIGNAL -- a frame to inspect, not a number to hide)")
+    xc_out = {**xc, "oracle_auc": cal["auc"],
+              "reading": ("agreement is VACUOUS here: 0 both-blocked (mini zero-positive) so it is "
+                          "dominated by both-free, and the presence oracle's AUC < 0.80 is INSUFFICIENT. "
+                          "Consistency cross-check, NOT evidence.")}
+    (_HERE / "results" / "camera_forward_crosscheck.json").write_text(json.dumps(xc_out, indent=2) + "\n")
+    print("\n  Independence: different MODALITY (optical vs TOF) + ALGORITHM (centerline image evidence vs EDT);")
+    print("  same vehicle/timestamp so MORE independent, not pristine. CONSISTENCY, not external truth.")
+    print("  H1 stays the sole headline; this upgrades H3-forward from same-data to cross-modality consistency.")
 
 
 if __name__ == "__main__":
