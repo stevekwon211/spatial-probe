@@ -15,6 +15,26 @@ anchor is GPU-heavy and is NOT done from a Mac. The claim is split: a Mac-feasib
 necessity on a deterministic analytic planner-surrogate over Occ3D-nuScenes + tracked-box motion, pure
 numpy) and a GPU-gated stretch (the nuPlan closed-loop reproduction), never presented as done here.
 
+## Decisions sealed (2026-06-23) — supersede any looser wording below
+
+1. **Field lattice (richer):** {static-occupancy-only} → {+per-object velocity} → {+occupancy-flow}
+   (flow = per-voxel 2D motion from consecutive GT occupancy by a fixed numpy procedure, provenance
+   argued non-circular). Velocity ships first; flow is the second field in the same matrix.
+2. **Framing = ACTION-SENSITIVITY, not necessity.** On a Mac there is no planner-quality oracle, so
+   Tier-1 measures whether removing a field MOVES vs LEAVES the deterministic surrogate's action
+   (action-sensitivity / action-equivalence). The word "necessary/sufficient" is reserved for Tier-2
+   (a real closed-loop planner whose score is a quality oracle). SH2/SH3 are action-sensitivity /
+   action-equivalence below.
+3. **Data = nuScenes val (already on disk).** Occ3D val occupancy is in `data/gts` (850 scenes =
+   train 700 + val 150) and box metadata in `data/nuscenes/v1.0-trainval` — both present from the
+   earlier extraction; NO new download for Tier-1 (raw camera/LiDAR val is absent but unused at
+   Tier-1). The official 150-scene val split is the held-out set, sealed in `held-out.txt`.
+4. **Primary metric = dimensionless decision-FLIP** (brake/proceed flip rate) — regime-comparable,
+   defuses the cross-regime scale-confound. Continuous decel-delta is a SECONDARY internal-validity
+   curve under a per-regime band, never the cross-regime headline.
+5. **Tiers: ship Tier-1 (Mac) first**, then Tier-2 (GPU/RunPod, PDM-Closed anchor) only after Tier-1
+   holds and the PDM metric/split is primary-confirmed.
+
 ## Sub-hypotheses
 
 - **SH1 — necessity EXISTS (oracle-free headline).** A non-identifiability witness: two frames with

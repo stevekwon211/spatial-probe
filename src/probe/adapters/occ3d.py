@@ -92,8 +92,27 @@ def _quaternion_yaw(q: list[float]) -> float:
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 
+def _global_velocity(a: dict, by_token: dict, ts: dict) -> tuple[float, float]:
+    """Per-object GLOBAL (vx, vy) m/s by finite-differencing box translations across the instance's
+    prev/next keyframe annotations (the nuScenes box_velocity construction). Central difference when
+    both neighbors exist, one-sided at a track endpoint, NaN if isolated -- NEVER silently 0, so a
+    missing motion field is visible downstream (dynfield's circular-oracle guard: velocity comes from
+    box differencing, independent of the occupancy the surrogate reads)."""
+    prev, nxt = by_token.get(a["prev"]), by_token.get(a["next"])
+    hi = nxt if nxt is not None else a
+    lo = prev if prev is not None else a
+    if hi is lo:
+        return (float("nan"), float("nan"))
+    dt = (ts.get(hi["sample_token"], 0) - ts.get(lo["sample_token"], 0)) / 1e6
+    if dt <= 0:
+        return (float("nan"), float("nan"))
+    return ((hi["translation"][0] - lo["translation"][0]) / dt,
+            (hi["translation"][1] - lo["translation"][1]) / dt)
+
+
 def _box_index(nusc_root: pathlib.Path) -> dict[str, list[dict]]:
-    """Lazily build + cache {sample_token: [annotation, ...]} joined to a coarse class label.
+    """Lazily build + cache {sample_token: [annotation, ...]} joined to a coarse class label and a
+    computed GLOBAL velocity (`_vel_global`).
 
     Reads the big nuScenes tables ONCE (sample_annotation is ~1.2M rows). Cached on the resolved path
     so repeated load_scene calls in one run pay it a single time."""
@@ -103,9 +122,13 @@ def _box_index(nusc_root: pathlib.Path) -> dict[str, list[dict]]:
         return cached
     cat_name = {c["token"]: c["name"] for c in json.loads((nusc_root / "category.json").read_text())}
     inst_cat = {i["token"]: cat_name.get(i["category_token"], "") for i in json.loads((nusc_root / "instance.json").read_text())}
+    ts = {s["token"]: s["timestamp"] for s in json.loads((nusc_root / "sample.json").read_text())}
+    anns = json.loads((nusc_root / "sample_annotation.json").read_text())
+    by_token = {a["token"]: a for a in anns}
     index: dict[str, list[dict]] = {}
-    for a in json.loads((nusc_root / "sample_annotation.json").read_text()):
+    for a in anns:
         a["_label"] = _coarse_label(inst_cat.get(a["instance_token"], ""))
+        a["_vel_global"] = _global_velocity(a, by_token, ts)
         index.setdefault(a["sample_token"], []).append(a)
     _BOX_INDEX_CACHE[key] = index
     return index
@@ -131,7 +154,9 @@ def _ego_frame_boxes(sample_token: str, ego_pose: dict, box_index: dict[str, lis
         left = -s * dx + c * dy        # ego-frame left (+y)
         w, l, h = a["size"]            # nuScenes size = (width, length, height); TrackedBox wants (length, width, height)
         box_yaw = _quaternion_yaw(a["rotation"]) - yaw
-        boxes.append(TrackedBox(center=(fwd, left, gz - tz), size=(l, w, h), yaw=box_yaw, label=a["_label"]))
+        vx, vy = a.get("_vel_global", (float("nan"), float("nan")))  # global -> ego (rotation only)
+        vel = (c * vx + s * vy, -s * vx + c * vy)                    # (forward, left) m/s; NaN stays NaN
+        boxes.append(TrackedBox(center=(fwd, left, gz - tz), size=(l, w, h), yaw=box_yaw, label=a["_label"], velocity=vel))
     return tuple(boxes)
 
 
