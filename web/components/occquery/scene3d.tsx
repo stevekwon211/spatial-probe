@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { CAMERA_PRESETS, useViewer, type ColorMode } from "./store";
 
 export type Obstacle = [number, number, number, number]; // ego frame: forward, left, up, class
+export type LidarPoint = [number, number, number, number]; // ego frame: forward, left, up, intensity
 
 export type ReachableField = {
   forward_min: number;
@@ -124,6 +125,42 @@ function ReachableOverlay({ field }: { field: ReachableField }) {
   );
 }
 
+// The RAW LiDAR scan (the measurement the voxels are discretized FROM), rendered as a point cloud.
+// Toggling voxel <-> points shows what discretization keeps vs drops -- the state-vs-render theme.
+function Points({ points }: { points: LidarPoint[] }) {
+  const ref = useRef<THREE.Points>(null!);
+  const pointSize = useViewer((s) => s.pointSize);
+  const colorMode = useViewer((s) => s.colorMode);
+  useEffect(() => {
+    const geom = ref.current?.geometry;
+    if (!geom) return;
+    const n = points.length;
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const c = new THREE.Color();
+    let minU = Infinity, maxU = -Infinity;
+    for (const [, , u] of points) { minU = Math.min(minU, u); maxU = Math.max(maxU, u); }
+    for (let i = 0; i < n; i++) {
+      const [f, l, u, inten] = points[i];
+      pos[i * 3] = f; pos[i * 3 + 1] = u; pos[i * 3 + 2] = l; // ego (fwd,left,up) -> three (x,y,z)
+      // color: height by default; intensity when colorMode=flat/semantic (LiDAR has no class)
+      const t = colorMode === "flat" || colorMode === "semantic"
+        ? Math.min(1, inten / 60)
+        : (u - minU) / (maxU - minU + 1e-6);
+      col.set(c.setHSL(0.62 - 0.5 * Math.max(0, Math.min(1, t)), 0.7, 0.55).toArray(), i * 3);
+    }
+    geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geom.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    geom.attributes.position.needsUpdate = true;
+  }, [points, colorMode]);
+  return (
+    <points ref={ref}>
+      <bufferGeometry />
+      <pointsMaterial size={pointSize} vertexColors sizeAttenuation toneMapped={false} />
+    </points>
+  );
+}
+
 function Ego({ w, l, h }: { w: number; l: number; h: number }) {
   const egoOpacity = useViewer((s) => s.egoOpacity);
   const wireframe = useViewer((s) => s.wireframe);
@@ -159,14 +196,17 @@ export function Scene3D({
   ego,
   voxelSize,
   reachable,
+  points,
   onGl,
 }: {
   obstacles: Obstacle[];
   ego: { width: number; length: number; height: number };
   voxelSize: number;
   reachable?: ReachableField | null;
+  points?: LidarPoint[] | null;
   onGl: (gl: THREE.WebGLRenderer) => void;
 }) {
+  const renderMode = useViewer((s) => s.renderMode);
   const showVoxels = useViewer((s) => s.showVoxels);
   const showEgo = useViewer((s) => s.showEgo);
   const showForward = useViewer((s) => s.showForward);
@@ -186,7 +226,8 @@ export function Scene3D({
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 20, 10]} intensity={0.8} />
       {showEgo && <Ego w={ego.width} l={ego.length} h={ego.height} />}
-      {showVoxels && <Voxels obstacles={obstacles} size={voxelSize} />}
+      {showVoxels && renderMode !== "points" && <Voxels obstacles={obstacles} size={voxelSize} />}
+      {renderMode !== "voxel" && points && points.length > 0 && <Points points={points} />}
       {showReachable && reachable && <ReachableOverlay field={reachable} />}
       {showForward && <Line points={[[0, 0.2, 0], [8, 0.2, 0]]} color="#ef4444" lineWidth={3} />}
       {showGrid && (

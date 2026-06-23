@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import Link from "next/link";
 import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
-import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Obstacle, type ReachableField } from "./scene3d";
+import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type LidarPoint, type Obstacle, type ReachableField } from "./scene3d";
 import { ControlPanel } from "./controls";
-import { useViewer } from "./store";
+import { useViewer, type RenderMode } from "./store";
 import { GlassPanel } from "./glass";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -69,10 +69,13 @@ export function OccqueryViewer() {
   const [frameIdx, setFrameIdx] = useState(0);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [reachable, setReachable] = useState<ReachableField | null>(null);
+  const [points, setPoints] = useState<LidarPoint[] | null>(null);
   const [copied, setCopied] = useState(false);
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
   const cache = useRef<Map<string, { obstacles: Obstacle[]; reachable: ReachableField | null }>>(new Map());
+  const lidarCache = useRef<Map<string, LidarPoint[]>>(new Map());
 
+  const renderMode = useViewer((s) => s.renderMode);
   const playing = useViewer((s) => s.playing);
   const speed = useViewer((s) => s.speed);
   const loop = useViewer((s) => s.loop);
@@ -109,6 +112,21 @@ export function OccqueryViewer() {
     const nt = meta.frames[frameIdx + 1]?.t;
     if (nt !== undefined) load(nt).catch(() => {});
   }, [meta, frameIdx, scene]);
+
+  // raw LiDAR point cloud — only fetched when a point-rendering mode is active
+  useEffect(() => {
+    if (!meta || renderMode === "voxel") { setPoints(null); return; }
+    const t = meta.frames[frameIdx]?.t;
+    if (t === undefined) return;
+    const key = `${scene}/${t}`;
+    const hit = lidarCache.current.get(key);
+    if (hit) { setPoints(hit); return; }
+    fetch(`${BASE}/${scene}/lidar${t}.json`).then((r) => r.json()).then((d) => {
+      const pts = d.points as LidarPoint[];
+      lidarCache.current.set(key, pts);
+      setPoints(pts);
+    }).catch(() => setPoints(null));
+  }, [meta, frameIdx, scene, renderMode]);
 
   // playback loop
   useEffect(() => {
@@ -178,7 +196,7 @@ export function OccqueryViewer() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#080808]">
-      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} onGl={(gl) => (glRef.current = gl)} />}
+      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} points={points} onGl={(gl) => (glRef.current = gl)} />}
 
       {/* top-left — context + view controls */}
       <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">
@@ -208,6 +226,22 @@ export function OccqueryViewer() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* render mode: discretized Occ3D voxels vs the raw LiDAR scan they are built from */}
+          <div className="mt-2 grid grid-cols-3 gap-1 rounded-lg border border-white/10 p-0.5">
+            {(["voxel", "points", "both"] as RenderMode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => set("renderMode", m)}
+                className={cn(
+                  "rounded-md py-1 text-[11px] capitalize transition-colors",
+                  renderMode === m ? "bg-white/15 text-white" : "text-white/45 hover:text-white/80",
+                )}
+              >
+                {m === "voxel" ? "voxel" : m === "points" ? "LiDAR" : "both"}
+              </button>
+            ))}
+          </div>
         </div>
 
         {meta && fm && p && (

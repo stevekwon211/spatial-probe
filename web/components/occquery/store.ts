@@ -3,8 +3,11 @@ import { create } from "zustand";
 export type ColorMode = "flat" | "height" | "forward" | "lateral" | "semantic" | "state";
 export type VoxelShape = "cube" | "sphere";
 export type Projection = "perspective" | "orthographic";
+export type RenderMode = "voxel" | "points" | "both";
 
 export type Settings = {
+  renderMode: RenderMode;
+  pointSize: number;
   showVoxels: boolean;
   showEgo: boolean;
   showForward: boolean;
@@ -26,6 +29,7 @@ export type Settings = {
 };
 
 export const DEFAULTS: Settings = {
+  renderMode: "voxel", pointSize: 0.04,
   showVoxels: true, showEgo: true, showForward: true, showGrid: true, showReachable: false,
   showStats: false, voxelShape: "cube", voxelScale: 0.85, voxelOpacity: 1, wireframe: false,
   egoOpacity: 0.55, colorMode: "height", projection: "perspective",
