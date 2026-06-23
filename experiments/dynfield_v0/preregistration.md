@@ -35,6 +35,34 @@ numpy) and a GPU-gated stretch (the nuPlan closed-loop reproduction), never pres
 5. **Tiers: ship Tier-1 (Mac) first**, then Tier-2 (GPU/RunPod, PDM-Closed anchor) only after Tier-1
    holds and the PDM metric/split is primary-confirmed.
 
+## v2 — graded IDM surrogate, danger-stratified (sealed 2026-06-23, BEFORE its run)
+
+v1's binary brake/proceed surrogate was too coarse (shuffled control failed: velocity flipped the
+decision on 3.3% of frames, below the 8.5% shuffled floor) -- on real, mostly-safe nuScenes following,
+distance dominates and a binary decision cannot surface velocity's effect. v2 fixes the SURROGATE and
+the REGIME axis, committed before running so the change is not fit to the v1 hint:
+
+- **Graded surrogate = IDM** (the planner PDM-Closed itself uses, so it ties to Tier-2). The action is
+  a CONTINUOUS commanded deceleration. static-only = IDM with the closing-gap term Δv set to 0 (gap
+  only); motion-aware = full IDM (the lead's relative velocity enters via the Δv interaction term).
+  The ablated field's effect is the decel-delta = |a_motion − a_static|, graded, not a binary flip.
+- **Primary metric = decel-delta** (continuous, regime-comparable as a magnitude) with a per-regime
+  bootstrap 95% CI and a SHUFFLED-velocity control (true velocity's decel-delta must beat a permuted
+  velocity's, else spurious). Decision-flip is demoted to a secondary descriptor (v1 showed it is too
+  coarse here).
+- **Regime axis = danger, cut NON-CIRCULARLY** (the ablated field must not define the regime):
+  AGENT-CONTEXT (class/geometry: following / crossing / vru -- velocity-independent) × a STATIC-URGENCY
+  band = ego_speed² / (2·gap) (a surrogate-safety danger proxy using EGO state + gap only, NOT the
+  lead's velocity). Low urgency = safe, high urgency = near-miss-ish. Standard TTC/DRAC is NOT used as
+  the cut because it is computed from the ablated velocity (circular).
+- **Gates (re-specified for the graded action, run FIRST):** surrogate-validity = the IDM decel rises
+  with closing speed and falls for a receding lead (monotone response to the field it should use); SH4
+  leakage (unchanged, passed at 0.184); shuffled-velocity control on decel-delta.
+- **Kills:** decel-delta EQUIVALENT (CI within the shuffled band) in EVERY regime → velocity is
+  action-redundant for this surrogate on real data, report the negative. Non-uniform (changing in
+  high-urgency/crossing, equivalent in low-urgency/following) → the by-regime action-sensitivity
+  result. "Necessary" still reserved for Tier-2.
+
 ## Sub-hypotheses
 
 - **SH1 — necessity EXISTS (oracle-free headline).** A non-identifiability witness: two frames with
