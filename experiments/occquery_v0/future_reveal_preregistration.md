@@ -128,3 +128,16 @@ here).
    gap + bootstrap CI per k and per unknown policy.
 3. Run on a pre-registered scene budget (start ~40 scenes, extend only if CIs need it — the budget, not
    the result, sets the extension), verify three ways, write `results/h3_future_reveal.md`.
+
+## Addendum (2026-06-23, data-availability fact discovered AFTER sealing — design unchanged)
+
+The raw-sweep grader needs `LIDAR_TOP/*.pcd.bin` at both t and t+k. Local raw sweeps cover exactly the
+**10 nuScenes-mini scenes** (scene-0061/0103/0553/0655/0757/0796/0916/1077/1094/1100), ~40 consecutive
+key-frames each, all with Occ3D GT — so the oracle IS buildable (t and t+k sweeps both present), but the
+audited subset is **10 scenes = 10 scene-clustered bootstrap units**, not the "~40" the build-order line
+hoped. This changes only the achievable N (wider CIs, lower power), NOT the hypothesis, metric, or kill
+criterion (all still sealed above). The feasibility probe's 850-scene geometry count stands (it needs
+only mask_lidar, not raw sweeps). Extending N requires downloading more raw nuScenes sweeps
+(account-gated). Honest consequence: a 10-scene relative-gap claim with bootstrap CIs is a small-but-hard
+audited subset (the framing the program already adopted), reported as such; if the gap CI is too wide to
+clear 0, that is an under-power outcome to report, not a kill to hide.
