@@ -40,6 +40,31 @@ following / changing when crossing" shape — but the binary flip metric (the pr
 is too coarse to certify it, and decel-delta was not shuffled-validated this run. It is a hint that a
 richer surrogate could surface, not a result.
 
+## v2 — graded IDM surrogate (pre-registered before its run): the by-regime thesis is HALF-confirmed
+
+v2 replaced the binary brake/proceed surrogate with a continuous IDM deceleration (the model PDM-Closed
+uses; the ablated velocity enters only via IDM's closing-gap term) and cut regimes non-circularly on
+agent-context × a static-urgency danger band (ego_speed²/2·gap, velocity-independent). On 672 lead-frames
+across 50 held-out val scenes:
+
+- **surrogate-validity gate PASSES** (graded IDM brakes more as closing rises, corr −0.53) — v2 fixes
+  v1's coarseness at the surrogate level (v1's binary failed this).
+- **CLEAN VERDICT: velocity is action-EQUIVALENT (redundant) in safe vehicle-following** (low-urgency,
+  n=443): true decel-delta 0.10, CI [0.06, 0.14], entirely BELOW the shuffled-velocity band [0.22, 0.56].
+  The "redundant when calmly following" half of the by-regime thesis, measured cleanly on real data.
+- **The complementary "necessary when dangerous" half is UNTESTABLE on nuScenes**: the high-urgency
+  (near-miss) cells are nearly empty (n=4) because the dataset is safe driving — the same crash-data
+  scarcity that flattened v1. Crossing/VRU cells are INDETERMINATE (overlapping CIs, thin n).
+- Honest sub-finding: globally the TRUE velocity's effect (decel-delta 0.24) is SMALLER than a shuffled
+  velocity's (0.37) — real velocities are benign (correlated with safe gaps), so velocity is mostly
+  action-redundant on normal driving. This is itself the "safe-following dominates" signal.
+
+Net: the by-regime action-sensitivity thesis is **half-confirmed on real data** — velocity is cleanly
+redundant in the dominant safe regime; whether it becomes necessary in danger cannot be shown because
+nuScenes has almost no danger. That missing half is exactly what a danger-bearing substrate (simulation
+/ generated safety-critical scenarios, GPU Tier-2) would supply — and where the word "necessary" is
+finally licensed (closed-loop collision oracle).
+
 ## Decision / pivot (pre-registered)
 
 Ship SH1 + SH4 as the Mac-feasible Tier-1 deliverables. The velocity action-sensitivity MATRIX is

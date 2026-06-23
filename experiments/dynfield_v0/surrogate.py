@@ -25,6 +25,7 @@ action), the dynamics analogue of occquery's expressivity witness.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 _A_MAX = 4.0          # m/s^2, comfortable max decel the surrogate is willing to command
@@ -67,3 +68,27 @@ def plan_motion_aware(state: StoredState) -> float:
         return 0.0
     ttc = state.lead_distance_m / closing
     return _A_MAX if ttc < _TTC_SAFE else 0.0
+
+
+# ---- v2: graded IDM longitudinal acceleration (continuous; the model PDM-Closed uses) ----
+# Action = commanded acceleration (negative = braking). The ablated MOTION field enters ONLY through
+# the closing-gap term v*dv/(2*sqrt(a*b)); static-only zeroes it. So decel-delta = the field's effect.
+_IDM = dict(v0=13.9, s0=2.0, T=1.5, a=1.5, b=2.0, delta=4.0)  # urban defaults; pre-registered config
+
+
+def _idm_accel(v_ego: float, gap: float, dv: float) -> float:
+    """IDM acceleration (m/s^2; negative = braking). dv = closing speed (ego - lead; >0 approaching)."""
+    p = _IDM
+    s_star = p["s0"] + max(0.0, v_ego * p["T"] + v_ego * dv / (2.0 * math.sqrt(p["a"] * p["b"])))
+    interaction = (s_star / gap) ** 2 if gap > 0.1 else 1e6
+    return p["a"] * (1.0 - (v_ego / p["v0"]) ** p["delta"] - interaction)
+
+
+def plan_idm_static(ego_speed: float, gap: float) -> float:
+    """Graded action WITHOUT the motion field: IDM with the closing term dropped (gap only)."""
+    return _idm_accel(ego_speed, gap, 0.0)
+
+
+def plan_idm_motion(ego_speed: float, gap: float, lead_fwd_speed: float) -> float:
+    """Graded action WITH the motion field: full IDM, closing = ego_speed - lead's forward speed."""
+    return _idm_accel(ego_speed, gap, ego_speed - lead_fwd_speed)
