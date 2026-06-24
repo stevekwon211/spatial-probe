@@ -21,7 +21,11 @@ export type ReachableField = {
 type Ranges = { minU: number; maxU: number; maxF: number; maxL: number };
 
 // Pre-allocated instance budget; mesh.count is set per frame so we never re-mount on frame change.
-const MAX_VOXELS = 12000;
+// Holds a full-height occupancy frame without truncation. The voxels come from export_web sorted by
+// (i,j,k) voxel index, so a cap BELOW the frame count drops a spatial corner (high-index voxels near the
+// ego vanish) -- the "voxels don't follow the ego" artifact. Full-height frames run to ~40k voxels; keep
+// headroom. One instanced draw call, so the cost is the per-frame matrix loop, not the GPU.
+const MAX_VOXELS = 48000;
 
 export const SEMANTIC_COLORS: Record<number, string> = {
   0: "#9ca3af", 1: "#f59e0b", 2: "#a855f7", 3: "#0ea5e9", 4: "#3b82f6",
