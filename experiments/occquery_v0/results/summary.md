@@ -18,7 +18,7 @@ hardware it cannot be (see H3 below). The committed hypothesis + kill criteria a
 |---|---|---|
 | **H1 expressivity** (oracle-free, SOLE headline) | ✅ **done** | 3-family witnesses + 20/24 queries inexpressible in RefAV |
 | instrument core (raycast / grid / predicates / Occ3D adapter / DSL / retrieval / metrics) | ✅ done | full suite green; runs on real mini (10 scenes / 404 frames) |
-| **H3 denotation** (DEMOTED to internal-consistency) | ◐ partial | scoring kernel built + verified; consistency probe run; the real P/R/F1 number is BLOCKED (below) |
+| **H3 denotation** (DEMOTED to internal-consistency) | ◐ tested-negative | independent **future-reveal** oracle BUILT (zero new download); free-extrapolation superiority over box-only **FALSIFIED** under the pre-registered primary (below) |
 | **H2 leaderboard** (HOTA-Temporal) | ✗ not started | substrate mismatch unresolved (different dataset; below) |
 | **M4 val run** + pursue/pivot on val | ✗ blocked | needs Occ3D val labels + a positive-containing, sealed scene set |
 
@@ -66,6 +66,37 @@ here (no raw LiDAR sweeps on disk, no second sensor on a Mac). What exists today
   Occ3D val occupancy labels, not on disk. The kernel + sealed queries are ready: the number is one
   data download + a hand-labeling/sealing step away (below).
 
+## H3 -- future-reveal independent oracle (2026-06-24) -- FALSIFIED under the primary
+
+A *temporal* independent oracle that needs no new download: run the occupancy reachable-free predicate
+on the single-frame-t OBSERVED view (it extrapolates free into UNOBSERVED space), then grade those
+extrapolations against what a later frame t+k's RAW LiDAR sweep DIRECTLY observes -- carved by our own
+algorithm (`reveal_oracle.py`), a different sweep + different algorithm the predicate never saw. Sealed
+BEFORE the grader existed (`../future_reveal_preregistration.md`). Feasibility passed (3-4k revealed
+voxels/frame, verified k=0 identity = 0 + scales with ego motion + a BEV alignment image). Carver
+verified 4 ways (free-air ahead, wall-pierce 3.1%, 97% free-agreement with Occ3D, k=0=0).
+
+Result on the 10 mini scenes (the only ones with local raw sweeps), `gap = F1(occ) - F1(box)`,
+OCCUPIED (box-less structure) = positive class, scene-clustered bootstrap, horizon 3.0 s:
+
+| unknown policy | k=1 gap (95% CI) | k=3 | k=5 | verdict |
+|---|---|---|---|---|
+| **free (PRIMARY)** | +0.011 [−0.011, +0.025] | −0.011 [−0.051, +0.012] | −0.031 [−0.085, +0.006] | **CI includes 0 at all k → FALSIFIED** |
+| ignored | ≡ free | ≡ free | ≡ free | FALSIFIED |
+| occupied | +0.145 [+0.048, +0.248] | +0.092 [−0.003, +0.198] | +0.043 [−0.061, +0.181] | clears 0 only at k=1 (caveat) |
+
+**Mechanism (verified, not degenerate):** on revealed cells, occ_pred flags OCCUPIED 40%, box_pred 2.5%,
+truth 15.5%. occ_pred OVER-flags occluded cells as occupied (a cell unseen at t is unseen *because* an
+obstacle blocked it, so the reachable flood is blocked → low precision); box UNDER-flags (low recall).
+Opposite profiles net to similar near-floor F1 → no occupancy advantage. **The forking-path guard held:**
+unknown→occupied "wins" at k=1, but it was NOT the pre-registered primary AND is near-degenerate
+(labels ~all unobserved cells occupied → catches structure trivially), so it is not promoted to the
+headline (leak channel #5). Net: occupancy's free-space EXTRAPOLATION into unseen space is no more
+accurate than box-only's on this independent oracle. H1 (expressivity) stands; H3's denotation-superiority
+claim is falsified here, strengthening the demotion with a real independent test. Detail:
+`h3_future_reveal.md` (local); reproduce: `reveal_grade.py --limit 10 --policy free`. Scope: 10 scenes
+(low power), static-only, temporal (not cross-modal) independence, 0.4 m floor, relative gap.
+
 ## Unknown-policy sensitivity on real mini (the conditioning signal)
 
 Each occupancy query was run under unknown=free vs unknown=occupied on the per-frame **masked** lidar
@@ -103,9 +134,12 @@ positive. A static measurement was being graded against a dynamic-danger answer 
   competitiveness check of the retrieval engine on the box-expressible query subset on Argoverse 2).
   Sourcing occupancy for Argoverse 2 would mean generating a non-released oracle, which undermines the
   released-oracle property H3 wants. H2 is a credibility leg; it is NOT required for the H1 headline.
-- **Independent oracle.** Not buildable on this Mac (same-sensor LiDAR cannot be its own independent
-  modality). Deliberately left unbuilt rather than faked; the consistency probe above is the honest
-  ceiling on the available data.
+- **Independent oracle.** A *cross-modal* oracle (stereo/ruler) is still not buildable on this Mac. But
+  a *temporal* one IS, and was built (2026-06-24): future-reveal (the H3 section below). It uses a later
+  raw LiDAR sweep — a different sweep at a different vantage, carved by a different algorithm than the
+  predicate, which never saw it — to grade free-space claims into space the frame-t sensor could not see.
+  It cleared the same-data+same-EDT circularity that demoted H3; the consistency probe above is no longer
+  the ceiling. A cross-modal corroboration (V2V4Real) remains a gated follow-on.
 
 ## Decision: PURSUE (H1 is the result; H3/H2 are expansion legs)
 
