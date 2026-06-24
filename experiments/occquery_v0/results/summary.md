@@ -106,6 +106,13 @@ are documented; neither rescues a degenerate substrate. Reproduce: `reveal_grade
 free`. This whole episode is the integrity machinery working: an adversarial audit of my own output
 caught two wrong calls and a false mechanism claim; the corrected answer is an honest INCONCLUSIVE.
 
+**Can the carve truth be cleaned INDEPENDENTLY (no GT)?** `structure_density.py` tries height (above-road
+occupied) + multi-return (≥2): structure precision rises 0.2% → 4.8% → **11.8%** and GT-confirmed
+structure cells 15 → 607 → 289 — so structure DOES exist above the road, but a GT-free criterion plateaus
+at 11.8% precision (88% still noise), too dirty to grade against. Confirms the path: a clean *independent*
+structure-truth needs cross-modal confirmation (a second sensor) or far more data, not just better
+carve-cleaning on sparse single sweeps.
+
 ## Unknown-policy sensitivity on real mini (the conditioning signal)
 
 Each occupancy query was run under unknown=free vs unknown=occupied on the per-frame **masked** lidar
