@@ -202,7 +202,7 @@ export function OccqueryViewer() {
       <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">
         <div className="flex items-center justify-between px-3 pt-3 pb-2">
           <Link
-            href="/"
+            href="/overview"
             title="back to pipeline"
             className="flex items-center gap-1 text-sm font-medium tracking-tight text-white/90 transition-colors hover:text-white"
           >

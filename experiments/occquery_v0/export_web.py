@@ -27,6 +27,7 @@ from probe.adapters.occ3d import _ordered_tokens, load_scene  # noqa: E402
 from probe.grid import OCCUPIED  # noqa: E402
 from probe.predicates.clearance import lateral_clearance  # noqa: E402
 from probe.predicates.freepath import free_along_ego_path, min_free_width_along_path  # noqa: E402
+from probe.predicates.objects import distance_to_nearest_object  # noqa: E402  (box-only baseline)
 from probe.predicates.reachable import reachable_free_field  # noqa: E402
 
 _DATA = _HERE.parents[1] / "data"
@@ -66,7 +67,7 @@ def main() -> None:
     annotations = json.loads((_DATA / "annotations.json").read_text())
     index = []
     for name in MINI:
-        scene = load_scene(name, _DATA, mask="none")
+        scene = load_scene(name, _DATA, mask="none", with_boxes=True)  # boxes for the box-only baseline
         e0, g0 = scene.ego_at(0), scene.grid_at(0)
         si = annotations["scene_infos"][name]
         tokens = _ordered_tokens(si)
@@ -100,6 +101,7 @@ def main() -> None:
                     "min_free_width": _finite(min_free_width_along_path(grid, ego, 2.0)),
                     "lateral_clearance": _finite(lateral_clearance(grid, ego)),
                     "free_path_blocked": not free_along_ego_path(grid, ego, 1.0, min_cluster_voxels=2),
+                    "box_distance": _finite(distance_to_nearest_object(scene, t)),  # box-only baseline
                 },
             })
         (_OUT / f"{name}.json").write_text(json.dumps({
