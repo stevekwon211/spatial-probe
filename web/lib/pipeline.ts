@@ -58,7 +58,7 @@ export const PIPELINE: Stage[] = [
         oneLine:
           "Occupancy-native predicates measure box-blind free-space geometry (clearance, free-width) that object-box query languages cannot express.",
         status: "in-progress",
-        statusLabel: "static measurement + 3D viewer",
+        statusLabel: "H1 expressivity holds · H3 inconclusive",
         href: "/occquery",
       },
     ],
@@ -110,8 +110,8 @@ export const PIPELINE: Stage[] = [
         axis: "dynamics / time",
         oneLine:
           "Which stored motion fields a planner truly needs, and in which moments (cut-in, hard brake, low TTC).",
-        status: "planned",
-        statusLabel: "Planned",
+        status: "in-progress",
+        statusLabel: "Tier-1: velocity redundant when safe",
       },
     ],
   },
