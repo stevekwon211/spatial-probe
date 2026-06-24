@@ -45,10 +45,13 @@ _EGO_H = 1.9            # ego height -> z-collapse band, matches reachable's max
 _BAND = (_ORIGIN[2] + np.arange(GRID_SHAPE[2]) * VOXEL_SIZE) <= (GROUND_HEIGHT + _EGO_H)  # z in ego body slab
 
 
-def _collapse(grid3d: np.ndarray) -> np.ndarray:
-    """z-collapse a FREE/OCCUPIED/UNKNOWN grid over the ego body slab -> 2D BEV (any-occupied)."""
+def _collapse(grid3d: np.ndarray, min_occ: int = 1) -> np.ndarray:
+    """z-collapse a FREE/OCCUPIED/UNKNOWN grid over the ego body slab -> 2D BEV.
+
+    min_occ = how many occupied voxels in the column count as an OCCUPIED cell (1 = any, the
+    pre-registered default; >1 = a robustness variant that drops single-return noise)."""
     band = grid3d[:, :, _BAND]
-    occ = (band == OCCUPIED).any(axis=2)
+    occ = (band == OCCUPIED).sum(axis=2) >= min_occ
     free = (band == FREE).any(axis=2)
     out = np.full(band.shape[:2], UNKNOWN, dtype=np.int8)
     out[free] = FREE
@@ -109,6 +112,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=10)
     ap.add_argument("--policy", choices=list(_POLICY), default="free")
+    ap.add_argument("--collapse-min", type=int, default=1, help="occupied voxels/column for OCCUPIED (1=pre-reg any; 2=majority robustness)")
     args = ap.parse_args()
     policy = _POLICY[args.policy]
     scene_infos = json.loads((_DATA / "annotations.json").read_text())["scene_infos"]
@@ -153,8 +157,13 @@ def main() -> None:
                     continue
                 sem_b, ml_b, R_b, t_b, pts_b, o_b, _, _ = frame(j)
                 reveal3d = reveal_truth_in_frame(pts_b, o_b, R_b, t_b, R_t, t_t)
-                reveal_bev = _collapse(reveal3d)
-                revealed = (reveal_bev != UNKNOWN) & ~obs_t_bev & near & ~dyn_bev & inwin
+                reveal_bev = _collapse(reveal3d, args.collapse_min)
+                # pre-registered leak-channel-2 control (part 2): drop revealed cells whose t+k carve
+                # conflicts with a t+k box -- a dynamic object that re-entered, not box-less static
+                # structure. t+k boxes are projected into the ego-t frame (t+k objects, t's ego_pose).
+                tk_box_bev = _box_pred_bev(_ego_frame_boxes(toks[j], fr_t["ego_pose"], box_index))
+                reentry = (reveal_bev == OCCUPIED) & tk_box_bev
+                revealed = (reveal_bev != UNKNOWN) & ~obs_t_bev & near & ~dyn_bev & inwin & ~reentry
                 if not revealed.any():
                     continue
                 rows[k].append((occ_occ_bev[revealed], box_occ_bev[revealed],

@@ -18,7 +18,7 @@ hardware it cannot be (see H3 below). The committed hypothesis + kill criteria a
 |---|---|---|
 | **H1 expressivity** (oracle-free, SOLE headline) | ✅ **done** | 3-family witnesses + 20/24 queries inexpressible in RefAV |
 | instrument core (raycast / grid / predicates / Occ3D adapter / DSL / retrieval / metrics) | ✅ done | full suite green; runs on real mini (10 scenes / 404 frames) |
-| **H3 denotation** (DEMOTED to internal-consistency) | ◐ tested-negative | independent **future-reveal** oracle BUILT (zero new download); free-extrapolation superiority over box-only **FALSIFIED** under the pre-registered primary (below) |
+| **H3 denotation** (DEMOTED to internal-consistency) | ◐ tested-INDETERMINATE | independent **future-reveal** oracle BUILT (zero new download); after an adversarial audit fixed an omitted pre-reg control, the occ-vs-box gap is at the F1 floor (thin HOLDS under pre-reg truth, NULL under stricter truth) — INDETERMINATE on 10 scenes (below) |
 | **H2 leaderboard** (HOTA-Temporal) | ✗ not started | substrate mismatch unresolved (different dataset; below) |
 | **M4 val run** + pursue/pivot on val | ✗ blocked | needs Occ3D val labels + a positive-containing, sealed scene set |
 
@@ -66,36 +66,47 @@ here (no raw LiDAR sweeps on disk, no second sensor on a Mac). What exists today
   Occ3D val occupancy labels, not on disk. The kernel + sealed queries are ready: the number is one
   data download + a hand-labeling/sealing step away (below).
 
-## H3 -- future-reveal independent oracle (2026-06-24) -- FALSIFIED under the primary
+## H3 -- future-reveal independent oracle (2026-06-24) -- INDETERMINATE at the F1 floor (a corrected, audited result)
 
 A *temporal* independent oracle that needs no new download: run the occupancy reachable-free predicate
 on the single-frame-t OBSERVED view (it extrapolates free into UNOBSERVED space), then grade those
 extrapolations against what a later frame t+k's RAW LiDAR sweep DIRECTLY observes -- carved by our own
 algorithm (`reveal_oracle.py`), a different sweep + different algorithm the predicate never saw. Sealed
-BEFORE the grader existed (`../future_reveal_preregistration.md`). Feasibility passed (3-4k revealed
-voxels/frame, verified k=0 identity = 0 + scales with ego motion + a BEV alignment image). Carver
-verified 4 ways (free-air ahead, wall-pierce 3.1%, 97% free-agreement with Occ3D, k=0=0).
+BEFORE the grader existed (`../future_reveal_preregistration.md`). Carver verified 4 ways (free-air
+ahead, wall-pierce 3.1%, 97% free-agreement with Occ3D, k=0=0). `gap = F1(occ) - F1(box)`, OCCUPIED
+(box-less structure) = positive, scene-clustered bootstrap over 10 mini scenes, horizon 3.0 s.
 
-Result on the 10 mini scenes (the only ones with local raw sweeps), `gap = F1(occ) - F1(box)`,
-OCCUPIED (box-less structure) = positive class, scene-clustered bootstrap, horizon 3.0 s:
+**This result was corrected after an adversarial audit (the integrity machinery working on my own
+output).** The first shipped grader (commit cbe404b) reported **FALSIFIED** (gap CI includes 0 at all
+k). A 5-dimension adversarial audit found a **real, result-flipping bug**: the grader implemented only
+part 1 of pre-registered leak-channel-2 (frame-t static-class exclusion) and silently OMITTED part 2 --
+"drop any revealed voxel whose t+k carve conflicts with a t+k box (a dynamic object that re-entered)".
+That omission let dynamic re-entry inflate the box baseline (box was credited for *moving vehicles*, not
+box-less static structure: post-control box loses 95/100 TPs, 0/1194 FPs). The control was sealed ~12h
+BEFORE the grader (`git blame` shows it never edited), so implementing it is executing the registration,
+not HARKing.
+
+With the omitted control implemented (and the policy curve, both verified to reproduce the audit's
+independent numbers to the digit):
 
 | unknown policy | k=1 gap (95% CI) | k=3 | k=5 | verdict |
 |---|---|---|---|---|
-| **free (PRIMARY)** | +0.011 [−0.011, +0.025] | −0.011 [−0.051, +0.012] | −0.031 [−0.085, +0.006] | **CI includes 0 at all k → FALSIFIED** |
-| ignored | ≡ free | ≡ free | ≡ free | FALSIFIED |
-| occupied | +0.145 [+0.048, +0.248] | +0.092 [−0.003, +0.198] | +0.043 [−0.061, +0.181] | clears 0 only at k=1 (caveat) |
+| **free (PRIMARY), any-occupied truth (pre-reg)** | +0.019 [+0.012, +0.025] | +0.017 [+0.006, +0.028] | +0.013 [+0.003, +0.022] | CI > 0 at all k → thin HOLDS |
+| **free, majority truth (≥2 returns, robustness)** | +0.002 [+0.001, +0.005] | −0.000 [−0.009, +0.008] | +0.002 [−0.004, +0.010] | CI includes 0 → NULL |
+| occupied (any) | +0.153 [+0.068, +0.255] | +0.126 | +0.095 | near-degenerate predict-all-occupied (not promoted) |
 
-**Mechanism (verified, not degenerate):** on revealed cells, occ_pred flags OCCUPIED 40%, box_pred 2.5%,
-truth 15.5%. occ_pred OVER-flags occluded cells as occupied (a cell unseen at t is unseen *because* an
-obstacle blocked it, so the reachable flood is blocked → low precision); box UNDER-flags (low recall).
-Opposite profiles net to similar near-floor F1 → no occupancy advantage. **The forking-path guard held:**
-unknown→occupied "wins" at k=1, but it was NOT the pre-registered primary AND is near-degenerate
-(labels ~all unobserved cells occupied → catches structure trivially), so it is not promoted to the
-headline (leak channel #5). Net: occupancy's free-space EXTRAPOLATION into unseen space is no more
-accurate than box-only's on this independent oracle. H1 (expressivity) stands; H3's denotation-superiority
-claim is falsified here, strengthening the demotion with a real independent test. Detail:
-`h3_future_reveal.md` (local); reproduce: `reveal_grade.py --limit 10 --policy free`. Scope: 10 scenes
-(low power), static-only, temporal (not cross-modal) independence, 0.4 m floor, relative gap.
+**Honest verdict: INDETERMINATE.** Under the pre-registered any-occupied truth, occupancy beats box-only
+at denoting box-less static structure (thin HOLDS, CI > 0) -- box-only has ~0 recall there by
+construction (no box → can't denote box-less structure, occquery's thesis), occupancy catches a little.
+But both predictors sit at the F1 floor (occ ~0.02, box ~0.001), and the thin advantage is carried by
+**single-return voxels**: requiring ≥2 LiDAR returns for an OCCUPIED truth cell collapses the gap to ~0.
+So on these 10 scenes the occupancy denotation advantage is at the noise floor -- neither the original
+FALSIFIED (which was a control-omission artifact) nor a robust HOLDS is warranted. H1 (expressivity)
+stands untouched; H3's denotation-superiority is **not** cleanly demonstrated here, but the demotion is
+no longer "no oracle exists" -- an independent oracle was built, and the answer on the mini subset is an
+honest at-the-floor INDETERMINATE. Tightening it needs more scenes (more raw sweeps) and/or a
+cross-modal grader (V2V4Real). Reproduce: `reveal_grade.py --limit 10 --policy free [--collapse-min 2]`.
+Scope: 10 scenes (low power), static-only, temporal (not cross-modal) independence, 0.4 m floor.
 
 ## Unknown-policy sensitivity on real mini (the conditioning signal)
 
