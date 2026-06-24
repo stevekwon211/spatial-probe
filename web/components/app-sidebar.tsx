@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, LayoutDashboard, Play } from "lucide-react";
+import { LayoutDashboard, Play } from "lucide-react";
 
 import { PIPELINE, SHIPPED, TOTAL } from "@/lib/pipeline";
 import { Button } from "@/components/ui/button";
@@ -28,9 +28,14 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Boxes className="size-4" />
-              </div>
+              <svg viewBox="0 0 32 32" className="size-8 shrink-0" fill="none" aria-hidden="true">
+                <g stroke="currentColor" strokeWidth={2}>
+                  <rect x="3" y="3" width="10" height="10" />
+                  <rect x="3" y="19" width="10" height="10" />
+                  <rect x="19" y="19" width="10" height="10" />
+                </g>
+                <rect x="18" y="2" width="12" height="12" fill="#2BB0A4" />
+              </svg>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">spatial-probe</span>
                 <span className="truncate text-xs text-muted-foreground">

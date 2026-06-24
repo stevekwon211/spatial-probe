@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+  <!-- spatial-probe FAVICON: the same occupancy-voxel mark, self-contained colors for a browser tab.
+       same even grid (margin 2 / cell 12 / gutter 4 / cell 12), same stroke-width 2, rx=0.
+       only change vs logo.svg: currentColor -> explicit ink (#111) so the free-space outlines do not
+       depend on inherited color in a tab. pixel-pure at true 16px. -->
+  <g stroke="#111" stroke-width="2">
+    <rect x="3"  y="3"  width="10" height="10"/>
+    <rect x="3"  y="19" width="10" height="10"/>
+    <rect x="19" y="19" width="10" height="10"/>
+  </g>
+  <rect x="18" y="2" width="12" height="12" fill="#2BB0A4"/>
+</svg>
