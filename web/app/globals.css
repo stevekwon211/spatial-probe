@@ -109,6 +109,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 @layer base {
@@ -118,4 +120,76 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ============================================================================
+   spatial-probe landing design system — ported from kde, recolored to OUR law:
+   achromatic #080808 + white; teal ONLY on a live measured value, never chrome.
+   kde's single orange --accent is SPLIT into --emph (white, ALL chrome) +
+   --data (teal, data only) so chrome can never reach teal. Decision procedure
+   for any colored element: "is this the literal output of a measurement?" ->
+   yes -> --data; no -> chrome -> white/X. Two role-named type ladders encode
+   the two-voice brand: PROSE = Geist sans; MACHINE = Geist Mono.
+   ============================================================================ */
+.landing {
+  /* color: achromatic + teal-on-DATA only */
+  --text:      #ffffff;
+  --muted:     color-mix(in srgb, #fff 55%, transparent);
+  --faint:     color-mix(in srgb, #fff 40%, transparent);
+  --dim:       color-mix(in srgb, #fff 30%, transparent);
+  --hairline:  color-mix(in srgb, #fff 8%, transparent);
+  --border-media: color-mix(in srgb, #fff 10%, transparent);
+  --emph:      #ffffff;     /* ALL chrome: focus, hovers, arrows, underline, CTA, eyebrows */
+  --data:      #2bb0a4;     /* teal: ONLY a live data value */
+  --data-text: #42c5b8;     /* brighter teal for small teal TEXT on dark */
+  --emph-select: color-mix(in srgb, #fff 18%, transparent);
+
+  /* PROSE / DISPLAY ladder */
+  --fs-display:  clamp(2.1rem, 5vw, 3rem);
+  --fs-lead:     clamp(15px, 2vw, 18px);
+  --fs-title:    20px;
+  --fs-subtitle: 16px;
+  --fs-body:     16px;
+  --fs-body-sm:  15px;
+  --fs-prose-sm: 13px;
+  /* MACHINE / MONO ladder */
+  --fs-mono-md:  13px;
+  --fs-mono-sm:  12px;
+  --fs-mono-xs:  11px;
+  /* weight (dark-only) */
+  --w-body: 400; --w-title: 500; --w-display: 500;
+  /* line-height */
+  --lh-display: 1.08; --lh-lead: 1.5; --lh-title: 1.25; --lh-prose: 1.6;
+  /* letter-spacing */
+  --ls-tight: -0.01em; --ls-text: 0.02em; --ls-meta: 0.05em; --ls-label: 0.08em; --ls-wide: 0.14em;
+  /* column / measure */
+  --col: 56rem; --col-wide: 64rem; --measure: 760px;
+  /* motion */
+  --dur-ui: 150ms; --dur-reveal: 380ms; --dur-burst: 520ms;
+  --rule-weight: 2px;
+}
+@media (max-width: 720px) {
+  .landing { --fs-mono-sm: 12.5px; --fs-mono-xs: 12px; }
+}
+.landing ::selection { background: var(--emph-select); }
+
+/* evidence-number treatment (kde Move 5): every number is tabular mono. */
+.metric { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* section-label pixel reveal — achromatic L->R wipe, one-shot */
+.sec-label[data-reveal] { -webkit-mask-image: linear-gradient(90deg,#000,#000); mask-image: linear-gradient(90deg,#000,#000); -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: 0% 100%; mask-size: 0% 100%; }
+.sec-label[data-reveal].is-in { animation: sec-label-reveal var(--dur-reveal) steps(7) forwards; }
+@keyframes sec-label-reveal { from { -webkit-mask-size: 0% 100%; mask-size: 0% 100%; } to { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; } }
+
+/* hover-underline link tier — white (chrome), dashed wipe */
+.ink-link { background-image: repeating-linear-gradient(90deg, var(--emph) 0 3px, transparent 3px 6px); background-repeat: no-repeat; background-position: left calc(100% + 3px); background-size: 0 var(--rule-weight); transition: background-size 200ms steps(6), color var(--dur-ui); }
+.ink-link:hover { background-size: 100% var(--rule-weight); color: var(--text); }
+
+/* pixel-burst copy spark — white */
+.copy-spark { position: absolute; width: 4px; height: 4px; background: var(--text); image-rendering: pixelated; pointer-events: none; animation: copy-spark var(--dur-burst) steps(6) var(--d) both; }
+@keyframes copy-spark { 0% { transform: translate(0,0) scale(0); opacity: 0; } 15% { transform: translate(calc(var(--tx)*.12), calc(var(--ty)*.12)) scale(1); opacity: 1; } 55% { transform: translate(calc(var(--tx)*.62), calc(var(--ty)*.62)) scale(1); opacity: 1; } 100% { transform: translate(var(--tx), var(--ty)) scale(1); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sec-label[data-reveal], .sec-label[data-reveal].is-in, .copy-spark, .ink-link { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  .sec-label[data-reveal] { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
 }
