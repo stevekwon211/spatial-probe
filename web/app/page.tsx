@@ -139,6 +139,13 @@ export default function Home() {
             <span>Pipeline</span>
             <span className="text-[9px] text-white/40">6 nodes</span>
           </button>
+          <Link
+            href="/evidence"
+            className="mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            <span>Evidence</span>
+            <span className="text-[9px] text-white/40">verdicts</span>
+          </Link>
           <button
             disabled
             className="mt-1 flex w-full cursor-not-allowed items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-white/30"
