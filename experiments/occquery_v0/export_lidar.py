@@ -57,7 +57,11 @@ def _export_frame(rec: dict, out_path: pathlib.Path, rng: np.random.Generator) -
     pts = np.fromfile(_DATA / rec["filename"], dtype=np.float32).reshape(-1, 5)
     xyz = pts[:, :3].astype(float)
     ego = (rec["R"] @ xyz.T).T + rec["t"]              # sensor -> ego (x fwd, y left, z up)
-    band = (ego[:, 2] > _GROUND) & (ego[:, 2] <= _HEIGHT)
+    # match the Occ3D voxel extent: full height above ground AND the +/-40 m grid footprint, so the
+    # point cloud and the voxels cover the same region and overlay cleanly (raw LiDAR sees farther, but
+    # beyond the grid there is no voxel to compare it to, which made the cloud look detached).
+    band = ((ego[:, 2] > _GROUND) & (ego[:, 2] <= _HEIGHT)
+            & (np.abs(ego[:, 0]) <= 40.0) & (np.abs(ego[:, 1]) <= 40.0))
     ego, inten = ego[band], pts[band, 3]
     if len(ego) > _MAX_POINTS:
         keep = rng.choice(len(ego), _MAX_POINTS, replace=False)

@@ -48,7 +48,11 @@ def _band_obstacles(scene, t, semantics):
     idx = np.argwhere(occ == OCCUPIED)
     centers = np.asarray(grid.origin) + idx * grid.voxel_size
     z = centers[:, 2]
-    band = (z > grid.ground_height) & (z <= grid.ground_height + ego.height)
+    # FULL-height occupancy column above ground -- the viewer overlays this on the raw LiDAR scan
+    # (export_lidar uses the same z > ground band), so buildings rise to match the LiDAR instead of
+    # being clipped to a thin ego-body slab. (The predicate's max_height_agl=ego.height band is a
+    # measurement concern, not a rendering one; do not reuse it here or the two layers detach.)
+    band = z > grid.ground_height
     cb = np.round(centers[band], 1)
     ib = idx[band]
     classes = semantics[ib[:, 0], ib[:, 1], ib[:, 2]].astype(int)
