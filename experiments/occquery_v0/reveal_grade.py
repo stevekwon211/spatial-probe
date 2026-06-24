@@ -158,11 +158,13 @@ def main() -> None:
                 sem_b, ml_b, R_b, t_b, pts_b, o_b, _, _ = frame(j)
                 reveal3d = reveal_truth_in_frame(pts_b, o_b, R_b, t_b, R_t, t_t)
                 reveal_bev = _collapse(reveal3d, args.collapse_min)
-                # pre-registered leak-channel-2 control (part 2): drop revealed cells whose t+k carve
-                # conflicts with a t+k box -- a dynamic object that re-entered, not box-less static
-                # structure. t+k boxes are projected into the ego-t frame (t+k objects, t's ego_pose).
-                tk_box_bev = _box_pred_bev(_ego_frame_boxes(toks[j], fr_t["ego_pose"], box_index))
-                reentry = (reveal_bev == OCCUPIED) & tk_box_bev
+                # pre-registered leak-channel-2 part 2: drop revealed cells whose t+k carve conflicts with
+                # a t+k box of a DYNAMIC object that RE-ENTERED -- re-audit fix: filter to MOVING boxes
+                # (speed > 0.5 m/s); the prior "any t+k box" form over-dropped PARKED cars (validly
+                # gradeable static structure) and that over-drop was the sole maker of the apparent gap.
+                moving = [b for b in _ego_frame_boxes(toks[j], fr_t["ego_pose"], box_index)
+                          if not math.isnan(b.velocity[0]) and math.hypot(b.velocity[0], b.velocity[1]) > 0.5]
+                reentry = (reveal_bev == OCCUPIED) & _box_pred_bev(moving)
                 revealed = (reveal_bev != UNKNOWN) & ~obs_t_bev & near & ~dyn_bev & inwin & ~reentry
                 if not revealed.any():
                     continue
