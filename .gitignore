@@ -5,9 +5,9 @@ data/
 *.npz
 *.bin
 
-# experiment outputs (keep a hand-written summary.md, ignore raw dumps)
+# experiment outputs (keep hand-written *summary.md, ignore raw dumps)
 experiments/**/results/*
-!experiments/**/results/summary.md
+!experiments/**/results/*summary.md
 
 # python
 __pycache__/
