@@ -7,7 +7,7 @@
 #     any/all          -> `predicate` over (scene, t)
 #     transition       -> `before` then `after` within `within_frames`
 #   refav_expressible: whether RefAV's box-only function set can express the query at all
-#                      (the expressivity-gap evidence; verified against the released 33-function
+#                      (the expressivity-gap evidence; verified against the released 32-function
 #                      atomic_functions.py, which has no dense-occupancy / free-space primitive).
 #
 # Predicate expressions are evaluated by probe.query_dsl.safe_eval (AST whitelist), never eval().
@@ -38,7 +38,7 @@ queries:
     scope: any
     predicate: "lateral_clearance(scene, t) < 0.3"
     refav_expressible: false
-    rationale: "lateral_clearance is the body-side free gap to the nearest OCCUPIED voxel surface. The obstacle abeam may be a wall, curb, or debris with no tracked cuboid, so RefAV's box+map set (cuboid pose/size/yaw + velocity + map polygons; no free-space primitive in the 33-function set) cannot see it. Tightest tier (0.3 m) anchoring the low end of the side-gap curve."
+    rationale: "lateral_clearance is the body-side free gap to the nearest OCCUPIED voxel surface. The obstacle abeam may be a wall, curb, or debris with no tracked cuboid, so RefAV's box+map set (cuboid pose/size/yaw + velocity + map polygons; no free-space primitive in the 32-function set) cannot see it. Tightest tier (0.3 m) anchoring the low end of the side-gap curve."
 
   - id: tight_clearance_at_speed  # stable id: GROUND_TRUTH key (synthetic.py), gallery, docs reference it
     nl: "ego had under half a meter of side clearance while going faster than 30 km/h"
