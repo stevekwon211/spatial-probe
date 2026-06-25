@@ -17,8 +17,9 @@ Verbs:
       Adapter -> Scene IR; validate it; print a summary (or write the IR parquet with --out).
   prism export <out.parquet> --data <path> [--scene <name>] [--openlabel <out.json>] [--jsonl <out.jsonl>]
       Ingest -> IR -> write a lossless parquet (and optional OpenLABEL / JSONL views).
-  prism view
-      Stub: prints that a viewer backend (rerun) is optional and not wired here.
+  prism view --backend rerun --data <path> [--scene <name>] [--out <log.rrd>] [--max-points N]
+      Ingest -> IR -> render to a Rerun recording (.rrd). Rerun is an OPTIONAL extra; without
+      rerun-sdk installed this prints the install hint and exits non-zero (never a faked render).
 """
 from __future__ import annotations
 
@@ -163,7 +164,35 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
 
 def _cmd_view(args: argparse.Namespace) -> int:
-    print("prism view: no viewer wired. use --backend rerun (optional) once a visualization backend is added.")
+    """Render a scene to a Rerun recording (.rrd). Rerun is an OPTIONAL backend -- this verb is the
+    ONLY CLI path that can reach it, and only when --backend rerun is passed AND rerun-sdk is
+    installed. Without rerun-sdk it prints the install hint and exits non-zero (never a fake render).
+    """
+    if args.backend != "rerun":
+        print(f"prism view: unknown backend {args.backend!r} (only 'rerun' is wired)")
+        return 2
+    data = pathlib.Path(args.data)
+    if not data.exists():
+        print(f"needs data: {data} does not exist (point --data at an AV2 log dir or an Occ3D root)")
+        return 2
+
+    from prism.adapt import AdapterError, ingest
+
+    try:
+        ir = ingest(data, scene=args.scene)
+    except AdapterError as e:
+        print(f"needs data: {e}")
+        return 2
+
+    from prism.adapters.rerun_adapter import RerunNotInstalled, to_rerun
+
+    out = args.out or f"{ir.name}.rrd"
+    try:
+        written = to_rerun(ir, out, max_points_per_frame=args.max_points)
+    except RerunNotInstalled as e:
+        print(str(e))
+        return 2
+    print(json.dumps({"name": ir.name, "n_frames": len(ir), "backend": "rerun", "written": str(written)}, indent=2))
     return 0
 
 
@@ -193,7 +222,12 @@ def build_parser() -> argparse.ArgumentParser:
     exp.add_argument("--jsonl", default=None, help="optional: also write per-frame JSONL here")
     exp.set_defaults(func=_cmd_export)
 
-    v = sub.add_parser("view", help="(stub) viewer backend is optional / not wired")
+    v = sub.add_parser("view", help="render a scene to a viewer backend (rerun, optional extra)")
+    v.add_argument("--backend", default="rerun", choices=["rerun"], help="visualization backend")
+    v.add_argument("--data", required=True, help="AV2 log dir or Occ3D data root")
+    v.add_argument("--scene", default=None, help="scene name (Occ3D); default = first scene")
+    v.add_argument("--out", default=None, help="output .rrd path; default = <scene>.rrd")
+    v.add_argument("--max-points", dest="max_points", type=int, default=None, help="cap occupancy points per frame (view-only decimation)")
     v.set_defaults(func=_cmd_view)
     return p
 

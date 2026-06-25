@@ -33,7 +33,7 @@ def _has_occ3d() -> bool:
 def test_parser_builds_all_verbs():
     p = build_parser()
     for verb in ("query", "ingest", "export", "view"):
-        ns = p.parse_args([verb] if verb == "view" else _min_args(verb))
+        ns = p.parse_args(_min_args(verb))
         assert ns.command == verb
 
 
@@ -44,14 +44,15 @@ def _min_args(verb: str):
         return ["ingest", "nope"]
     if verb == "export":
         return ["export", "out.parquet", "--data", "nope"]
-    return [verb]
+    return ["view", "--data", "nope"]  # view is now wired to a backend + --data, not a stub
 
 
-def test_view_is_a_clear_stub(capsys):
-    rc = main(["view"])
+def test_view_missing_data_reports_clearly(capsys):
+    """view --backend rerun on a non-existent path: a clear 'needs data', not a stub or a crash."""
+    rc = main(["view", "--backend", "rerun", "--data", "/no/such/path"])
     out = capsys.readouterr().out
-    assert rc == 0
-    assert "rerun" in out and "optional" in out
+    assert rc == 2
+    assert "needs data" in out
 
 
 def test_query_missing_data_reports_clearly(capsys):
