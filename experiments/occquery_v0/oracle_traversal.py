@@ -83,9 +83,15 @@ def main() -> None:
     ap.add_argument("--window", type=int, default=5)   # W frames ~ 0.5 s at 10 Hz (sealed)
     ap.add_argument("--far", type=float, default=-1e9)  # EXPLORATORY: restrict ribbon to x>far (beyond the ego self-return zone, x>3.9); default = sealed (no restriction)
     ap.add_argument("--limit", type=int, default=18)
+    ap.add_argument("--logs", type=pathlib.Path, default=_LOGS,
+                    help="log manifest. Flat {uuid:[ts]} = v0 danger subset; "
+                         "{_meta, logs:[uuid]} = held-out free-driving = ALL frames.")
     args = ap.parse_args()
-    danger = json.loads(_LOGS.read_text())
-    names = list(danger)[: args.limit]
+    danger = json.loads(args.logs.read_text())
+    # held-out free-driving schema declares its logs under "logs" and carries no
+    # per-frame danger subset; the flat v0 schema maps each uuid -> [danger_ts].
+    held_out = isinstance(danger, dict) and "logs" in danger and "_meta" in danger
+    names = (danger["logs"] if held_out else list(danger))[: args.limit]
     rng = np.random.default_rng(0)
     XX, YY = _bev_centers()
 
@@ -98,7 +104,9 @@ def main() -> None:
         all_sweeps = sorted(int(p.stem) for p in (log_dir / "sensors" / "lidar").glob("*.feather"))
         idx_of = {ts: i for i, ts in enumerate(all_sweeps)}
         poses = _world_poses(log_dir)
-        danger_ts = [int(t) for t in danger[name]]
+        # held-out free-driving: no danger subset -> every driven frame (all sweeps).
+        # v0: the per-log danger timestamps. Sealed estimand unchanged; only the input frame-set.
+        danger_ts = list(all_sweeps) if held_out else [int(t) for t in danger[name]]
         scene = av2_sensor.load_scene(name, _AV2, timestamps=danger_ts)
         dsorted = sorted(set(danger_ts))  # frame fi <-> dsorted[fi] (load_scene keeps sorted-sweep order)
         used = 0
