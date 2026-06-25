@@ -168,12 +168,15 @@ def _collect(names, n_min, min_boxes, range_bin_m, rng, n_curve):
             continue
         ann = _annotations(log_dir)
         # C1 guard (oracle-validity falsifier #5): ann_ts must be a subset of the LiDAR sweeps.
-        sweeps = set(int(p.stem) for p in (log_dir / "sensors" / "lidar").glob("*.feather"))
-        if not set(int(t) for t in np.unique(ann["ts"])).issubset(sweeps):
+        sweeps_sorted = sorted(int(p.stem) for p in (log_dir / "sensors" / "lidar").glob("*.feather"))
+        if not set(int(t) for t in np.unique(ann["ts"])).issubset(sweeps_sorted):
             dropped_logs.append(name)
             continue
         scene = av2_sensor.load_scene(name, _AV2, with_boxes=False)
-        occ_by_ts = {int(round(fr.time * 1e9)): fr.grid.grid for fr in scene.frames}
+        # Key occupancy by the EXACT integer sweep timestamp (load_scene builds frames in sorted-sweep
+        # order). NOT via fr.time: ts/1e9*1e9 round-trips through float64 and ns > 2^53 lose precision,
+        # which would silently miss the int-exact box timestamps (the same class of bug as the labeler).
+        occ_by_ts = {ts: fr.grid.occupancy for ts, fr in zip(sweeps_sorted, scene.frames)}
 
         # empirical on-road support: union of BEV columns covered by any INCLUDED (pts>=primary N) box.
         # SPEC-NOTE: "any included box across the log" -- "included" = the primary inclusion set (pts>=n_min);
