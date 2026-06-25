@@ -3,8 +3,11 @@
 """`prism` CLI -- run the spatial-probe instrument from the shell.
 
 Each verb runs end-to-end on real on-disk data (or prints a clear "needs data" message; never a
-stub that pretends). The query verb reuses `probe.query_dsl.safe_eval` + the predicate namespace
-(the SAME AST-whitelist the mcp_server and retrieval use -- a query expression is untrusted input).
+stub that pretends). The query verb routes through `prism.query.namespace` + `probe.query_dsl.safe_eval`
+(the SAME AST-whitelist + ONE shared predicate namespace the programmatic `prism.query.query` API
+uses -- a query expression is untrusted input), so the CLI and the API never drift apart. That
+namespace carries the S3 physical predicates (occluded / ttc / object_speed / velocity) on top of
+the existing occupancy/box predicates.
 
 Verbs:
   prism query "<expr>" --data <root> [--scene <name>] [--policy free|occupied|ignored] [--frame N]
@@ -26,7 +29,7 @@ import sys
 
 from probe.grid import UnknownPolicy
 from probe.query_dsl import UnsafeExpression, safe_eval
-from probe.retrieval import namespace
+from prism.query import namespace
 
 _POLICY = {"free": UnknownPolicy.FREE, "occupied": UnknownPolicy.OCCUPIED, "ignored": UnknownPolicy.IGNORED}
 
@@ -54,7 +57,8 @@ def _cmd_query(args: argparse.Namespace) -> int:
     if not data.exists():
         print(f"needs data: {data} does not exist (point --data at an AV2 log dir or an Occ3D root)")
         return 2
-    needs_boxes = "distance_to_nearest_object" in args.expr
+    # box-reading predicates need the tracked boxes loaded; occupancy/occlusion predicates do not.
+    needs_boxes = any(p in args.expr for p in ("distance_to_nearest_object", "ttc", "object_speed", "velocity"))
     sc = _load_scene_for_query(data, args.scene, with_boxes=needs_boxes)
     if sc is None:
         print(f"needs data: {data} is not a recognized dataset (AV2 log dir or Occ3D root)")

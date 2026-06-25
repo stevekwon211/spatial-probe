@@ -25,6 +25,8 @@ from prism.ir import (
     SceneIR,
     Track,
 )
+from prism.predicates import object_speed, occluded, ttc, velocity
+from prism.query import QueryResult, query
 from prism.serialize import (
     content_hash,
     from_parquet,
@@ -56,4 +58,10 @@ __all__ = [
     "content_hash",
     "validate_scene",
     "ValidationError",
+    "query",
+    "QueryResult",
+    "occluded",
+    "object_speed",
+    "ttc",
+    "velocity",
 ]
