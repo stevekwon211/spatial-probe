@@ -15,7 +15,11 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",  # ndimage: C-space reachable_free_field (predicates/reachable.py)
     "pyyaml>=6.0",
+    "pyarrow>=14",  # prism: lossless Scene IR (de)serialization + av2 calibration feathers
 ]
+
+[project.scripts]
+prism = "prism.cli:main"
 
 [project.optional-dependencies]
 # added at the milestone that needs them — kept out of the base install
@@ -25,6 +29,7 @@ mcp = ["mcp>=1.2"]                    # mcp_server/: expose the probe as LLM-cal
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["probe*", "prism*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
