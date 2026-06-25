@@ -44,7 +44,7 @@ def _occ_forward_gap(grid, ego) -> float:
     if not len(centers):
         return _LEAD_RANGE
     fwd, lat = ego.to_ego_frame(centers[:, :2])
-    m = (fwd > 0.5) & (fwd <= _LEAD_RANGE) & (np.abs(lat) < _CORRIDOR)
+    m = (fwd > 0.5) & (fwd <= _LEAD_RANGE) & (np.abs(lat) < ego.width / 2.0)  # v3: ego in-path strip, not box corridor
     return float(fwd[m].min()) if m.any() else _LEAD_RANGE
 
 
@@ -61,8 +61,12 @@ def _lead_box(scene, t):
 
 
 def _delta(occ_gap: float, box_gap: float, ego_speed: float) -> float:
-    """|IDM(occ_gap) - IDM(box_gap)| -- the representation swap's effect on the commanded accel."""
-    return abs(plan_idm_static(ego_speed, occ_gap) - plan_idm_static(ego_speed, box_gap))
+    """|IDM(occ_gap) - IDM(box_gap)| -- the representation swap's effect on the commanded accel.
+    v3: clamp each IDM action to the physical [-9, +3] m/s^2 band before differencing (an action, not a
+    sub-meter-gap blowup)."""
+    def a(g: float) -> float:
+        return max(-9.0, min(3.0, plan_idm_static(ego_speed, g)))
+    return abs(a(occ_gap) - a(box_gap))
 
 
 def main() -> None:

@@ -1,57 +1,57 @@
-# R0 — occupancy-vs-box action-sensitivity: honest result (2026-06-25)
+# R0 — occupancy-vs-box action-sensitivity: final result (2026-06-25)
 
-Pre-registrations: `r0_preregistration.md` (58e189a), `r0v2_preregistration.md` (8ca2530) — both sealed
-before the corresponding run. This summary is the honest outcome; nothing below was tuned to pass.
+Pre-registrations, each sealed before its run: `r0_preregistration.md` (58e189a), `r0v2_preregistration.md`
+(8ca2530), `r0v3_preregistration.md` (commit before this run). Q1 (oracle-free): does swapping the spatial
+representation fed to a fixed IDM (occupancy forward free-distance vs box lead distance) CHANGE the
+commanded action, beyond a shuffled-occupancy null, by a pre-named regime set? Nothing below was tuned to pass.
 
-## Verdict: INCONCLUSIVE on Q1 by this design — and the pre-registered gate exposed WHY (a real result).
+## Verdict: pre-registered NEGATIVE — occupancy is action-EQUIVALENT to boxes here (Q1, safe nuScenes following).
 
-R0 asked the oracle-free Q1: does swapping the spatial representation fed to a fixed IDM (occupancy
-forward free-distance vs box lead distance) CHANGE the commanded action beyond a shuffled-occupancy null?
+R0-v3 is VALID (both pre-registered gates pass) and EVERY regime cell returns EQUIVALENT: the occ-vs-box
+representation swap does not move the clamped IDM action beyond shuffled-occupancy noise, in any tested
+regime, on the held-out nuScenes val set (50 scenes, 672 in-corridor lead-frames).
 
-### What happened, in order
-1. **R0-v1 — INVALID (gate caught a bug).** GATE-2 (predicate-correctness: occ_gap ≈ box_gap within one
-   voxel on clean frames) = **0/145**. Debug-from-evidence (read the actual values, not a guess):
-   `reachable_free_field`'s BEV forward extent `reach = ego.length/2 + ego.speed·horizon` collapses to
-   ~2.4 m when the ego is stopped (most lead-frames have ego_speed ≈ 0), so occ_gap was clamped below the
-   7–15 m lead. An instrument bug, not a finding. The pre-registered gate did its job.
-2. **R0-v2 — instrument fixed, still INVALID, but the gate now exposes a DESIGN flaw, not a bug.** occ_gap
-   rebuilt as the nearest occupancy obstacle SURFACE in the corridor up to `_LEAD_RANGE` (speed-independent);
-   box_gap rebuilt as the box FRONT surface. GATE-2 rose 0% → **56%** (still < 70% → INVALID per the literal
-   sealed gate). The diagnostic of the 44% disagreement is decisive:
-   - occ FARTHER than box (occ misses the lead = a bug): **0%**.
-   - occ NEARER than box (occ sees structure the box pipeline has no object for): **100%** of disagreements.
-   - median (occ − box) = −0.20 m, mean −3.16 m, |Δ| p90 = 13.5 m.
+```
+GATE-1 surrogate-validity  : PASS (closing↑→accel↓ corr −0.51)
+GATE-2 predicate-correctness: PASS (occ ≈ box within 0.4 m on 80% of 655 clean frames, need ≥70%)
+shuffled (global)          : true action-delta 0.06  vs shuffled 0.58  m/s²
+  vehicle_following|low_urgency  EQUIVALENT  true 0.01 CI[0.00,0.01]  shuf[0.36,0.83]  n=440
+  vehicle_crossing|low_urgency   EQUIVALENT  true 0.29 CI[0.02,0.72]  shuf[0.23,0.87]  n=60
+  vru|low_urgency                EQUIVALENT  true 0.08 CI[0.02,0.20]  shuf[0.21,0.68]  n=85
+  other|low_urgency              EQUIVALENT  true 0.10 CI[0.02,0.19]  shuf[0.39,0.91]  n=78
+  other|high_urgency             EQUIVALENT  true 0.61 CI[0.02,0.81]  shuf[1.61,5.34]  n=4  (under-powered)
+```
+Per the sealed kill criterion, EQUIVALENT-everywhere is the pre-registered NEGATIVE headline, not a footnote.
 
-### The real finding the gate exposed
-Occupancy's forward free-distance is ≤ the box lead distance in **100%** of clean lead-frames (it NEVER
-misses the tracked lead), and strictly nearer in 44% of them — occupancy denotes nearer free-space
-structure the box pipeline cannot express. That is occquery **H1 (expressivity) shown on the
-action-relevant gap quantity**, on real nuScenes-mini data, oracle-free.
+## How we got here — the integrity machinery fired three times
+1. **v1 INVALID — a gate caught a bug.** GATE-2 = 0/145: occ_gap was clamped to ~2.4 m because
+   `reachable_free_field`'s BEV forward extent collapses when the ego is stopped. Debug-from-evidence (read
+   the values) found it. The pre-registered gate did its job.
+2. **v2 INVALID — adversarial review caught my OVERCLAIM.** With occ_gap rebuilt (surface, corridor scan)
+   GATE-2 rose to 56%. I wrote that the gate "contradicts the hypothesis" (a structural occ-vs-box tension).
+   An adversarial re-review showed that was wrong: the 56% was a **corridor-width artifact** — `_CORRIDOR =
+   1.5 m` (inherited from the sparse-box lead selector) applied to a dense-occupancy `min`-scan latched
+   roadside SHOULDER voxels (82.8% of "occ-nearer" hits at |lateral| > 1.0 m). The wide strip structurally
+   forces occ ≤ box, manufacturing the "0% farther / sees structure boxes can't express" story. Root cause:
+   reused a box corridor for an occupancy scan, plus an unclamped IDM (sub-meter "gaps" → ~−174 m/s²). Not a
+   structural tension — a fixable instrument bug. "occupancy never misses the lead" and "structure boxes
+   cannot express" were over-stated (the genuine no-box share was ~69%, not 100%).
+3. **v3 VALID — root-cause fix, no tuning.** occ_gap scans the ego in-path strip (|lateral| < ego.width/2,
+   the ego's own collision width), and the IDM action is clamped to [−9,+3] m/s² before differencing. Both
+   sealed before the run. GATE-2 → 80% (PASS), occ-farther → a normal two-sided rate. Result above: a clean
+   EQUIVALENT-everywhere negative.
 
-But this is exactly why the action-sensitivity verdict is **inconclusive by this design**: the
-predicate-correctness gate required occ ≈ box to validate the instrument, while the hypothesis (and the
-data) is that occupancy sees MORE. The gate and the question are in tension — requiring agreement filters
-out the very signal R0 wanted to test. The gap-swap-through-a-fixed-IDM-with-an-agreement-gate design is
-structurally self-contradictory on a substrate where the two representations genuinely differ.
-
-Separately, the by-regime matrix (set aside since the gate failed) trended EQUIVALENT/INDETERMINATE: even
-the large occ-vs-box gap differences mostly did not clear the shuffled-occupancy band — because shuffling
-occ_gaps across frames also produces large random deltas. So the pre-registered prior (likely
-action-equivalent in the abundant safe regime; danger cell under-powered on nuScenes) is NOT contradicted.
-
-### Honest standing
-- Q1 (does the representation change the action) on this substrate via this design: **INCONCLUSIVE** —
-  not because of a bug (v2 occ never misses the lead) but because the agreement-gated gap-swap cannot
-  isolate the action effect when occupancy legitimately sees more.
-- H1-consistent side-observation (real, oracle-free): occupancy's action-relevant forward free-distance
-  is never farther than, and often nearer than, the box lead — it sees structure boxes do not.
-- Ceiling unchanged: this is Q1-only; no Q2 (outcome) / Q3 (better) claim. "occupancy helps the planner"
-  is prior art (OccNet, PKL); only the falsifiable shuffled-controlled framing was ours, and it returned
-  inconclusive here.
-
-### A v3 would need a NEW sealed pre-registration (do not edit v1/v2 to pass)
-The corrected gate is "occ never MISSES the box lead (occ-farther rate ≈ 0 = no bug)" — which the v2 data
-passes — and DROP the within-0.4 m agreement requirement (it contradicts the premise). Proposing+running
-that now, after seeing it passes, is a forking path — so it is left as a sealed v3 step, not run here.
-The deeper fix is to test action-sensitivity where occupancy-sees-more actually matters (a danger/cut-in
-substrate), not on safe nuScenes following where dynfield already found the action redundant.
+## What this does and does not say
+- **Says (Q1, oracle-free):** on safe nuScenes vehicle-following, occupancy's in-path forward free-distance
+  agrees with the box lead distance (80% within one voxel) and, where it differs, the difference does not
+  change the IDM action beyond noise. The representation swap is action-equivalent here.
+- **Consistent with:** dynfield (velocity action-redundant when safe), and the reframe — the action-change
+  signal, if any, lives in DANGER (cut-ins, near-miss), which nuScenes barely contains (high_urgency n=4,
+  under-powered). This negative is on the abundant safe regime, exactly where redundancy is expected.
+- **Does NOT say:** anything about Q2 (outcome) or Q3 (better) — those need a closed-loop collision/progress
+  oracle on a danger substrate (GPU + nuPlan/PDM-Closed + a danger-bearing dataset), which this lacks.
+  "occupancy helps the planner" is prior art (OccNet, PKL); our only contribution is the falsifiable,
+  shuffled-controlled, pre-registered framing — which returned a clean, honest negative here.
+- **Next (where the signal could live):** re-run on a danger-bearing 3D substrate (Argoverse-2
+  scenario-mining cut-ins / near-collisions — labels already downloaded) where occupancy-sees-more actually
+  bears on the action, with the same sealed protocol.
