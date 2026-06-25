@@ -27,5 +27,46 @@ The danger substrate is car-FOLLOWING. Over a 4 s lookahead the lead vehicle MOV
 3. **Run on HELD-OUT logs** — fresh vehicle-longitudinal danger logs NOT among the 18 explored here (re-test exploratory findings on fresh data).
 4. **Or switch substrate** to free-driving (non-following) segments, where there is no moving lead to vacate occupied space — the cleanest fix.
 
+## v0.1 — the clean held-out confirmatory: RELIABLE (2026-06-25)
+Pre-registration sealed BEFORE data: `oracle_traversal_v0_1_preregistration.md` (commit 6fdbf5c), input
+`oracle_heldout_logs.json` (sha256 f58ae31c…). Plumbing (`--logs` + held-out schema) commit e578493. Both
+sealed before the run below — git timestamps make any later HARKing visible.
+
+Run (once): `oracle_traversal.py --logs oracle_heldout_logs.json --window 10 --far 3.9 --limit 8`.
+Parameters are mechanism-derived, NOT result-selected:
+- **far = _EGO_X1 = 3.9 m** — the exact ego self-return-removal boundary (`av2_sensor.py:41`); excludes the
+  construction-zeroed near field that faked v0's W=5 pass. No "+1 voxel" margin (the 4.3 m draft is rejected
+  as result-flavored, and 3.9 matches the sha256-sealed input's `far_m`).
+- **W = 10 frames (1.0 s)** — the round 10 Hz second; the §b minimum to escape the ego zone is ≤2 frames on
+  free-driving, so 10 is mechanism-anchored, an order of magnitude below the result-picked W=40. (v0's
+  "1.8 m/s / 0.91 m" creep figure did NOT reproduce against the poses — measured following median is
+  5.19 m/s; it was the stop-and-go tail subset. W is sealed from the measured speed, not the prose.)
+- **substrate = 8 free-driving held-out logs**, disjoint from the 18 explored in v0 (`escape_frac=1.00`,
+  `close_lead_frac_15m=0.00` for all 8) — fresh data AND the cleaner substrate at once.
+
+### Result
+**true FP 0.0000 CI[0.0000, 0.0000] vs shuffled-null 0.0357 CI[0.0309, 0.0409] over 1177 frames → RELIABLE**
+(true CI strictly below shuffled CI; sealed decision rule). Deterministic (seed 0) — re-ran, numbers
+byte-identical.
+
+The perfect zero is not a construction artifact this time, and the shuffled null is the control that proves
+it: random occupied mass relocated in the same grid hits the same swept ribbon 3.6% of the time, so the
+ribbon IS "hittable" and a hallucinating occupancy WOULD have scored > 0. The near-field trap that made v0's
+W=5 zero meaningless is gone (every counted cell is real road past x=3.9 m), and free-driving removes the
+moving-lead confound, so true FP = 0 means occupancy places NO hallucinated obstacle on the physically-driven
+road. The reachable kill (any ribbon∩occupied overlap → FP > 0) simply did not fire; occupancy passed it.
+
+### Honest scope (unchanged from the pre-reg — do NOT re-inflate)
+- **ONE-SIDED, false positives only.** Says nothing about RECALL (real obstacles occupancy MISSES) — that is
+  the stereo-recall oracle (`oracle_stereo_recall_preregistration.md`, sealed, module not yet built).
+- **Upper bound:** cross-traffic can vacate a voxel within the lookahead and inflate FP against occupancy;
+  here it is already 0, so occupancy's real driven-path hallucination rate is ≤ 0.
+- **Thin slice / free-driving only:** certifies only the ego's driven ribbon on free-driving held-out; the
+  following substrate and off-path space are not tested here.
+- **Independence, not external truth:** recorded poses (not LiDAR) + rigid-body sweep (not voxelization) make
+  this much more independent than a same-data consistency check, but it is the same vehicle/timestamp — per
+  repo CLAUDE.md H3 is demoted to internal-consistency; this oracle's independence is the argument it exceeds
+  that, NOT a verified-safe claim. Genuinely label-free (boxes not read by the estimand).
+
 ## Bigger picture — this is ONE signal of the oracle, and the weaker half
 Traversal tests occupancy FALSE POSITIVES (hallucinated obstacles) only; it cannot test RECALL (real obstacles occupancy MISSES) — the half that matters most for the safety story. oracle-v1 adds the two complementary independent signals: the camera cross-modal confirm (real AV2 ring cameras — independent SENSOR; we have them, just un-downloaded) and multi-sweep persistence (independent observation geometry), each with its OWN measured reliability against a small human-labeled calibration set. The contribution is the HONEST ACCOUNTING of how much a label-free verdict can be trusted — not any single oracle.

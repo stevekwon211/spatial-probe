@@ -161,7 +161,8 @@ def main() -> None:
         verdict = "RELIABLE" if true_b["hi"] < shuf_b["lo"] else (
             "UNRELIABLE" if true_b["lo"] >= shuf_b["lo"] else "INDETERMINATE")
     report = {
-        "substrate": "AV2-Sensor val danger logs (av2_danger_logs.json), ego in-path swept ribbon",
+        "substrate": ("held-out free-driving" if held_out else "danger-subset") +
+                     f" logs ({args.logs.name}), ego in-path swept ribbon, far={args.far}",
         "window_frames": args.window, "n_logs": len({*scenes}), "n_frames": len(rows),
         "true_fp_mean": true_b["mean"], "true_fp_ci": [true_b["lo"], true_b["hi"]],
         "shuffled_fp_mean": shuf_b["mean"], "shuffled_fp_ci": [shuf_b["lo"], shuf_b["hi"]],
