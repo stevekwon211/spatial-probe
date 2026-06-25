@@ -7,6 +7,32 @@ file path is absolute. arXiv ids and confidence are marked inline.
 
 ---
 
+## CORRECTION (2026-06-25) — primary evidence supersedes the L6 "box-centric" finding
+
+A screenshot of the **live Visionary PRISM viewer** (shared by Doeon) is PRIMARY evidence that overrides
+the secondary-source L6 verdict. PRISM **does render semantic occupancy** (voxels colored by class —
+road / car / person / wall / vegetation / …) across **9 datasets** (waymo, nuscenes, av2, pandaset, once,
+lyft, truckscenes, nvidia, etri; ~20 scenes each), with synchronized surround **cameras** (CAM_FRONT /
+FRONT_LEFT / FRONT_RIGHT / SIDE_LEFT / SIDE_RIGHT) and a Class / Track-ID **box** overlay + a Map layer.
+So "Visionary is box-centric / has no occupancy" (L6) is **WRONG** — it was inferred from their empty
+public marketing site, not the product. Occupancy + multi-dataset adapters (their IROS cross-platform
+strength, made real) are **present and commodity**.
+
+**This sharpens the pitch, it does not kill it.** PRISM **visualizes** occupancy but shows **no
+free-space QUERY** (the left panel is a scene-name filter; search is box class / track, not "find scenes
+where free corridor < 1 m"). So the gap MOVES: not "they lack occupancy" but **"they cannot QUERY
+free-space over the occupancy they already render, nor verify the answer is correct."** That is exactly
+this document's refined conclusion — the contribution is the **query + denotation-correctness oracle
+layer, NOT the perception.** And because they ALREADY render the voxels, the L5 **collapse attack**
+("querying a grid you have is a half-day script") is MORE pressing — which makes the **independent
+denotation-correctness oracle the load-bearing moat.**
+
+**Meeting wording:** never say "you're box-centric / you don't do occupancy" (false, on-screen
+refutable). Say "you already render occupancy across 9 datasets — the missing layer is a *composable
+free-space query* over it plus an *independent, label-free check that its answer is correct*."
+
+---
+
 ## Bottom line (honest)
 
 Both premises survive **as scoped facts, not as the headline sentences currently written.** The
