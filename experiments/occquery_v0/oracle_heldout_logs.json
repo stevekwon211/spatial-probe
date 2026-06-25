@@ -1,0 +1,69 @@
+{
+  "_meta": {
+    "purpose": "Clean held-out confirmatory of the ego-traversal oracle (oracle_traversal.py). FREE-DRIVING substrate, NOT among the 18 in dynfield_v0/av2_danger_logs.json.",
+    "substrate_decision": "free-driving (option b) \u2014 escape_frac=1.00, close_lead_frac=0.00; removes both the near-field-ribbon and moving-lead confounds. See oracle_heldout_preregistration.md.",
+    "selection": "AV2-Sensor val, cleanest free-driving logs (escape>=0.99, close_lead<15m frac=0, mid_lead<40m frac<=0.10), speed-stratified across ego disp/1s in [7.3,15.0] m/s, all NOT in the 18.",
+    "W_frames": 10,
+    "far_m": 3.9,
+    "metrics_per_log": {
+      "d5d6f11c-3026-3e0e-9d67-c111233e22de": {
+        "disp_per_1s_m": 14.95,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 157
+      },
+      "c865c156-0f26-411c-a16c-be985333f675": {
+        "disp_per_1s_m": 12.12,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 159
+      },
+      "c2d44a70-9fd4-3298-ad0a-c4c9712e6f1e": {
+        "disp_per_1s_m": 10.8,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 157
+      },
+      "bbd19ca1-805a-3c22-8df3-cd7501aa06f3": {
+        "disp_per_1s_m": 10.69,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 157
+      },
+      "070bbf42-31d3-3aa9-aca4-c262afc9077d": {
+        "disp_per_1s_m": 9.08,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 156
+      },
+      "a1589ae2-2678-310e-91cc-c4b512cd7fa5": {
+        "disp_per_1s_m": 8.55,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 156
+      },
+      "c222c78d-b574-4b9d-82e1-96a4f3f8bb27": {
+        "disp_per_1s_m": 7.93,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 159
+      },
+      "27be7d34-ecb4-377b-8477-ccfd7cf4d0bc": {
+        "disp_per_1s_m": 7.26,
+        "escape_frac": 1.0,
+        "close_lead_frac_15m": 0.0,
+        "n_frames": 156
+      }
+    }
+  },
+  "logs": [
+    "d5d6f11c-3026-3e0e-9d67-c111233e22de",
+    "c865c156-0f26-411c-a16c-be985333f675",
+    "c2d44a70-9fd4-3298-ad0a-c4c9712e6f1e",
+    "bbd19ca1-805a-3c22-8df3-cd7501aa06f3",
+    "070bbf42-31d3-3aa9-aca4-c262afc9077d",
+    "a1589ae2-2678-310e-91cc-c4b512cd7fa5",
+    "c222c78d-b574-4b9d-82e1-96a4f3f8bb27",
+    "27be7d34-ecb4-377b-8477-ccfd7cf4d0bc"
+  ]
+}
