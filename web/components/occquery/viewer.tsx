@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
 import Link from "next/link";
 import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
-import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type LidarPoint, type Obstacle, type ReachableField } from "./scene3d";
+import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Box, type LidarPoint, type Obstacle, type ReachableField } from "./scene3d";
 import { ControlPanel } from "./controls";
 import { useViewer, type RenderMode } from "./store";
 import { GlassPanel } from "./glass";
@@ -78,9 +78,10 @@ export function OccqueryViewer() {
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [reachable, setReachable] = useState<ReachableField | null>(null);
   const [points, setPoints] = useState<LidarPoint[] | null>(null);
+  const [boxes, setBoxes] = useState<Box[] | null>(null);
   const [copied, setCopied] = useState(false);
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
-  const cache = useRef<Map<string, { obstacles: Obstacle[]; reachable: ReachableField | null }>>(new Map());
+  const cache = useRef<Map<string, { obstacles: Obstacle[]; boxes: Box[]; reachable: ReachableField | null }>>(new Map());
   const lidarCache = useRef<Map<string, LidarPoint[]>>(new Map());
 
   const renderMode = useViewer((s) => s.renderMode);
@@ -106,17 +107,17 @@ export function OccqueryViewer() {
     if (!meta) return;
     const t = meta.frames[frameIdx]?.t;
     if (t === undefined) return;
-    const load = (tt: number): Promise<{ obstacles: Obstacle[]; reachable: ReachableField | null }> => {
+    const load = (tt: number): Promise<{ obstacles: Obstacle[]; boxes: Box[]; reachable: ReachableField | null }> => {
       const key = `${scene}/${tt}`;
       const hit = cache.current.get(key);
       if (hit) return Promise.resolve(hit);
       return fetch(`${BASE}/${scene}/f${tt}.json`).then((r) => r.json()).then((d) => {
-        const frame = { obstacles: d.obstacles as Obstacle[], reachable: (d.reachable ?? null) as ReachableField | null };
+        const frame = { obstacles: d.obstacles as Obstacle[], boxes: (d.boxes ?? []) as Box[], reachable: (d.reachable ?? null) as ReachableField | null };
         cache.current.set(key, frame);
         return frame;
       });
     };
-    load(t).then((f) => { setObstacles(f.obstacles); setReachable(f.reachable); }).catch(() => { setObstacles([]); setReachable(null); });
+    load(t).then((f) => { setObstacles(f.obstacles); setBoxes(f.boxes); setReachable(f.reachable); }).catch(() => { setObstacles([]); setBoxes(null); setReachable(null); });
     const nt = meta.frames[frameIdx + 1]?.t;
     if (nt !== undefined) load(nt).catch(() => {});
   }, [meta, frameIdx, scene]);
@@ -165,6 +166,7 @@ export function OccqueryViewer() {
       else if (k === "o") st.toggle("showVoxels");
       else if (k === "e") st.toggle("showEgo");
       else if (k === "g") st.toggle("showGrid");
+      else if (k === "b") st.toggle("showBoxes");
       else if (k === "r") reset();
       else if (k === "f") {
         if (document.fullscreenElement) document.exitFullscreen();
@@ -206,7 +208,7 @@ export function OccqueryViewer() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#080808]">
-      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} points={points} onGl={(gl) => (glRef.current = gl)} />}
+      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} points={points} boxes={boxes} onGl={(gl) => (glRef.current = gl)} />}
 
       {/* top-left — context + view controls */}
       <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">

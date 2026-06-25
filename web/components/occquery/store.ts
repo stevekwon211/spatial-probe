@@ -13,6 +13,7 @@ export type Settings = {
   showForward: boolean;
   showGrid: boolean;
   showReachable: boolean;
+  showBoxes: boolean;
   showStats: boolean;
   voxelShape: VoxelShape;
   voxelScale: number;
@@ -30,7 +31,7 @@ export type Settings = {
 
 export const DEFAULTS: Settings = {
   renderMode: "voxel", pointSize: 0.04,
-  showVoxels: true, showEgo: true, showForward: true, showGrid: true, showReachable: false,
+  showVoxels: true, showEgo: true, showForward: true, showGrid: true, showReachable: false, showBoxes: true,
   showStats: false, voxelShape: "cube", voxelScale: 0.85, voxelOpacity: 1, wireframe: false,
   egoOpacity: 0.55, colorMode: "height", projection: "perspective",
   playing: false, speed: 1, loop: true, panelCollapsed: false, settingsOpen: false,
@@ -76,7 +77,7 @@ export const CAMERA_PRESETS: { id: string; label: string; pos: [number, number, 
 
 // shipped as disabled "coming soon" controls (need data/backend we don't have yet)
 export const COMING_SOON: { group: string; items: string[] }[] = [
-  { group: "Overlays", items: ["Tracked-box overlay", "Measurement tool", "Occupancy-flow vectors"] },
+  { group: "Overlays", items: ["Measurement tool", "Occupancy-flow vectors"] },
   { group: "Search", items: ["Natural-language search", "Find similar scenes", "GT vs predicted diff"] },
   { group: "Panels", items: ["Embeddings (UMAP)", "HD-map underlay", "Multi-sensor panes", "SAM2 annotate"] },
 ];

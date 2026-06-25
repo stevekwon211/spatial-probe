@@ -79,9 +79,15 @@ def main() -> None:
             # the reachable free-space field the predicates measure -- exported so the web overlay
             # renders the SAME field (visual-data agreement = H1 visual, not measurement accuracy)
             rf = reachable_free_field(grid, ego, 2.0, min_cluster_voxels=2)
+            # tracked-box cuboids (ego frame) -- the box-only pipeline's view, for the box-vs-occupancy
+            # counterfactual overlay. [forward, left, up, length, width, height, yaw, label]
+            boxes = [[round(float(o.center[0]), 2), round(float(o.center[1]), 2), round(float(o.center[2]), 2),
+                      round(float(o.size[0]), 2), round(float(o.size[1]), 2), round(float(o.size[2]), 2),
+                      round(float(o.yaw), 3), str(o.label)] for o in scene.objects_at(t)]
             (_OUT / name / f"f{t}.json").write_text(json.dumps({
                 "t": t,
                 "obstacles": obstacles,
+                "boxes": boxes,
                 "reachable": {
                     "forward_min": round(float(rf.forward_min), 3),
                     "lateral_min": round(float(rf.lateral_min), 3),

@@ -8,6 +8,7 @@ import { CAMERA_PRESETS, useViewer, type ColorMode } from "./store";
 
 export type Obstacle = [number, number, number, number]; // ego frame: forward, left, up, class
 export type LidarPoint = [number, number, number, number]; // ego frame: forward, left, up, intensity
+export type Box = [number, number, number, number, number, number, number, string]; // ego: forward, left, up, length, width, height, yaw, label
 
 export type ReachableField = {
   forward_min: number;
@@ -176,6 +177,23 @@ function Ego({ w, l, h }: { w: number; l: number; h: number }) {
   );
 }
 
+// The tracked-box pipeline's view: each box a white wireframe cuboid. Overlaid on the colored
+// occupancy voxels, the counterfactual is visible -- voxels with NO box around them are structure
+// the box pipeline cannot express (the H1 thesis, made visual). Achromatic by the color law: boxes
+// are geometry/chrome, not a measured value, so they stay white, never teal.
+function Boxes({ boxes }: { boxes: Box[] }) {
+  return (
+    <group>
+      {boxes.map((b, i) => (
+        <mesh key={i} position={[b[0], b[2], b[1]]} rotation={[0, -b[6], 0]}>
+          <boxGeometry args={[b[3], b[5], b[4]]} />
+          <meshStandardMaterial color="#e5e7eb" transparent opacity={0.4} wireframe toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function CameraController() {
   const { camera, controls } = useThree() as unknown as {
     camera: THREE.Camera;
@@ -201,6 +219,7 @@ export function Scene3D({
   voxelSize,
   reachable,
   points,
+  boxes,
   onGl,
 }: {
   obstacles: Obstacle[];
@@ -208,10 +227,12 @@ export function Scene3D({
   voxelSize: number;
   reachable?: ReachableField | null;
   points?: LidarPoint[] | null;
+  boxes?: Box[] | null;
   onGl: (gl: THREE.WebGLRenderer) => void;
 }) {
   const renderMode = useViewer((s) => s.renderMode);
   const showVoxels = useViewer((s) => s.showVoxels);
+  const showBoxes = useViewer((s) => s.showBoxes);
   const showEgo = useViewer((s) => s.showEgo);
   const showForward = useViewer((s) => s.showForward);
   const showGrid = useViewer((s) => s.showGrid);
@@ -232,6 +253,7 @@ export function Scene3D({
       {showEgo && <Ego w={ego.width} l={ego.length} h={ego.height} />}
       {showVoxels && renderMode !== "points" && <Voxels obstacles={obstacles} size={voxelSize} />}
       {renderMode !== "voxel" && points && points.length > 0 && <Points points={points} />}
+      {showBoxes && boxes && boxes.length > 0 && <Boxes boxes={boxes} />}
       {showReachable && reachable && <ReachableOverlay field={reachable} />}
       {showForward && <Line points={[[0, 0.2, 0], [8, 0.2, 0]]} color="#ef4444" lineWidth={3} />}
       {showGrid && (
