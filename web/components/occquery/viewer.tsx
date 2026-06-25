@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
 import Link from "next/link";
 import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
@@ -11,17 +11,25 @@ import { GlassPanel } from "./glass";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { VerdictHero } from "./verdict-hero";
+import { FailureRibbon } from "./failure-ribbon";
+import { deltaSeries, deriveEvents } from "./events";
+import { FINDINGS } from "@/lib/findings";
 
 type Predicates = {
   ego_width: number;
   min_free_width: number | null;
   lateral_clearance: number | null;
   free_path_blocked: boolean;
+  box_distance: number | null;
 };
 type FrameMeta = { t: number; speed: number; n_obstacles_band: number; n_obstacles_total: number; predicates: Predicates };
 type SceneMeta = { scene: string; voxel_size: number; ego: { width: number; length: number; height: number }; n_frames: number; frames: FrameMeta[] };
 
 const BASE = "/data/occquery";
+
+const H1_FINDING = FINDINGS.find((f) => f.id === "h1");
+const H3_FINDING = FINDINGS.find((f) => f.id === "h3");
 
 function Row({ k, v, hot }: { k: string; v: string; hot?: boolean }) {
   return (
@@ -193,6 +201,8 @@ export function OccqueryViewer() {
 
   const fm = meta?.frames[frameIdx];
   const p = fm?.predicates;
+  const series = useMemo(() => (meta ? deltaSeries(meta.frames) : []), [meta]);
+  const events = useMemo(() => (meta ? deriveEvents(meta.frames) : []), [meta]);
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#080808]">
@@ -213,6 +223,11 @@ export function OccqueryViewer() {
             <RotateCcw className="size-3" />
             reset
           </button>
+        </div>
+
+        {/* program-level verdict — stated ONCE, achromatic chrome, NOT per-frame (no oracle) */}
+        <div className="px-3 pb-1 font-mono text-[10px] tracking-wide text-white/30">
+          H1 expressivity {H1_FINDING?.verdict ?? "HOLDS"} (oracle-free) · H3 {H3_FINDING?.verdict ?? "INCONCLUSIVE"}
         </div>
 
         <div className="px-3 pb-2">
@@ -245,12 +260,28 @@ export function OccqueryViewer() {
         </div>
 
         {meta && fm && p && (
-          <div className="mx-3 mb-2 space-y-1 rounded-lg bg-white/[0.04] p-2.5 font-mono text-xs">
-            <Row k="speed" v={`${fm.speed} m/s`} />
-            <Row k="obstacles" v={`${fm.n_obstacles_band}`} />
-            <Row k="min_free_width" v={p.min_free_width === null ? "none" : `${p.min_free_width} m`} />
-            <Row k="lateral_clearance" v={p.lateral_clearance === null ? "none" : `${p.lateral_clearance} m`} />
-            <Row k="free_path_blocked" v={p.free_path_blocked ? "TRUE" : "false"} hot={p.free_path_blocked} />
+          <div className="mx-3 mb-2 space-y-2">
+            {/* VerdictHero — per-frame claim sentence, the reasoning HERO (measurement, not a verdict) */}
+            <VerdictHero
+              lateralClearance={p.lateral_clearance}
+              boxDistance={p.box_distance ?? null}
+              freePathBlocked={p.free_path_blocked}
+            />
+            <div className="space-y-1 rounded-lg bg-white/[0.04] p-2.5 font-mono text-xs">
+              <Row k="speed" v={`${fm.speed} m/s`} />
+              <Row k="obstacles" v={`${fm.n_obstacles_band}`} />
+              <Row k="min_free_width" v={p.min_free_width === null ? "none" : `${p.min_free_width} m`} />
+              <Row k="lateral_clearance" v={p.lateral_clearance === null ? "none" : `${p.lateral_clearance} m`} />
+              <Row k="box_distance" v={p.box_distance == null ? "none" : `${p.box_distance} m`} />
+              <Row k="free_path_blocked" v={p.free_path_blocked ? "TRUE" : "false"} hot={p.free_path_blocked} />
+            </div>
+            {/* not exported — never faked as a live number (see repo result-framing law) */}
+            <div className="space-y-1 rounded-lg border border-white/[0.05] p-2.5 font-mono text-xs opacity-40">
+              <div className="mb-0.5 text-[9px] uppercase tracking-wide text-white/20">needs export</div>
+              <Row k="occlusion %" v="—" />
+              <Row k="TTC" v="—" />
+              <Row k="action-delta" v="—" />
+            </div>
           </div>
         )}
 
@@ -276,6 +307,13 @@ export function OccqueryViewer() {
           <div className="flex h-9 items-center rounded-xl bg-white/[0.04] px-3 text-xs text-white/30">Ask a question…</div>
         </div>
       </GlassPanel>
+
+      {/* FailureRibbon — the time axis indexed BY the occ-vs-box measurement, not uniform time */}
+      {meta && series.length > 0 && (
+        <GlassPanel className="absolute bottom-20 left-1/2 -translate-x-1/2 px-3 py-2 text-white">
+          <FailureRibbon series={series} events={events} frameIdx={frameIdx} onSeek={setFrameIdx} totalFrames={meta.n_frames} />
+        </GlassPanel>
+      )}
 
       {/* bottom-center — time + capture */}
       {meta && fm && (
