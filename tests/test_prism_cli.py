@@ -32,7 +32,7 @@ def _has_occ3d() -> bool:
 
 def test_parser_builds_all_verbs():
     p = build_parser()
-    for verb in ("query", "ingest", "export", "view"):
+    for verb in ("query", "ingest", "export", "view", "find"):
         ns = p.parse_args(_min_args(verb))
         assert ns.command == verb
 
@@ -44,7 +44,42 @@ def _min_args(verb: str):
         return ["ingest", "nope"]
     if verb == "export":
         return ["export", "out.parquet", "--data", "nope"]
+    if verb == "find":
+        return ["find", "path blocked", "--data", "nope"]
     return ["view", "--data", "nope"]  # view is now wired to a backend + --data, not a stub
+
+
+def test_find_missing_data_reports_clearly(capsys):
+    rc = main(["find", "path blocked but no tracked object", "--data", "/no/such/path"])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "needs data" in out
+
+
+def test_find_unknown_query_reports_clearly(capsys):
+    log = _first_av2_log()
+    if log is None:
+        pytest.skip("no AV2 log to exercise the signature mapping")
+    rc = main(["find", "completely unrelated nonsense phrase", "--data", str(log), "--limit-frames", "1"])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "no signature" in out
+
+
+@pytest.mark.skipif(_first_av2_log() is None, reason="no AV2-Sensor log on disk")
+def test_find_runs_on_real_av2_log(capsys):
+    log = _first_av2_log()
+    rc = main(["find", "path blocked but no tracked object explains it",
+               "--data", str(log), "--limit-frames", "20"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    # human summary block is printed, then the JSON; the JSON parses and carries the honest fields.
+    assert "signature: path_blocked_no_box" in out
+    json_start = out.index("{")
+    summary = json.loads(out[json_start:])
+    assert summary["signature"] == "path_blocked_no_box"
+    assert summary["n_frames_scanned"] > 0
+    assert "external" in summary["honesty"].lower()
 
 
 def test_view_missing_data_reports_clearly(capsys):

@@ -20,6 +20,14 @@ Verbs:
   prism view --backend rerun --data <path> [--scene <name>] [--out <log.rrd>] [--max-points N]
       Ingest -> IR -> render to a Rerun recording (.rrd). Rerun is an OPTIONAL extra; without
       rerun-sdk installed this prints the install hint and exits non-zero (never a faked render).
+  prism find "<query>" --data <corpus-or-log> [--scene <name>] [--horizon S] [--box-radius M]
+             [--n-interior-min N] [--limit-frames N] [--render rerun [--out <log.rrd>]] [--json]
+      The S6 wow verb. Map a natural-ish query to a failure SIGNATURE (the H1 occupancy-vs-box set
+      difference -- there are NO model predictions on disk, so these are H1/consistency failures, not
+      model-eval), mine it over the corpus, and print a clean human summary + structured JSON: how
+      many matching frame-intervals, the signature, mean range, top categories, the dominant cluster,
+      and K most-similar frames (FEATURE-distance, not semantic). Honest counts -- zero is a real
+      negative, never inflated. `--data` may be a single AV2 log dir OR the av2_sensor corpus root.
 """
 from __future__ import annotations
 
@@ -196,6 +204,88 @@ def _cmd_view(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_find_logs(data: pathlib.Path, scene: str | None):
+    """Resolve --data to a list of SceneIRs. `data` may be a single recognized dataset (one AV2 log
+    dir or an Occ3D root) OR a CORPUS ROOT holding many AV2 log subdirs (the data/danger/av2_sensor
+    case). Returns (irs, label) or (None, reason) -- never a stub."""
+    from prism.adapt import AdapterError, _is_av2_log, ingest
+
+    if _is_av2_log(data) or ((data / "annotations.json").exists() and (data / "gts").is_dir()):
+        try:
+            return [ingest(data, scene=scene)], data.name
+        except AdapterError as e:
+            return None, str(e)
+    # corpus root: every immediate subdir that is itself an AV2 log
+    if data.is_dir():
+        logs = sorted(p for p in data.iterdir() if p.is_dir() and _is_av2_log(p))
+        if logs:
+            return [ingest(p) for p in logs], f"{data.name} ({len(logs)} logs)"
+    return None, f"{data} is not a recognized dataset or AV2 corpus root"
+
+
+def _cmd_find(args: argparse.Namespace) -> int:
+    from prism.failure import find
+
+    data = pathlib.Path(args.data)
+    if not data.exists():
+        print(f"needs data: {data} does not exist (point --data at an AV2 log dir or the av2_sensor corpus root)")
+        return 2
+    irs, label = _resolve_find_logs(data, args.scene)
+    if irs is None:
+        print(f"needs data: {label}")
+        return 2
+    params = {
+        "horizon": args.horizon,
+        "box_radius_m": args.box_radius,
+        "n_interior_min": args.n_interior_min,
+    }
+    if args.limit_frames is not None:
+        params["limit_frames"] = args.limit_frames
+    try:
+        summary = find(args.query, irs, params=params)
+    except ValueError as e:  # query maps to no signature -> fail loudly, never default silently
+        print(f"no signature for query: {e}")
+        return 2
+
+    # the wow: human summary first, then structured JSON (unless --json-only).
+    if not args.json_only:
+        print(summary["human_summary"])
+        print()
+    if args.json_only or not args.no_json:
+        print(json.dumps(summary, indent=2, default=float))
+
+    # optional render of the dominant cluster's frames to a .rrd (reuses the rerun adapter; lazy).
+    if args.render == "rerun" and summary["clusters"]:
+        rc = _render_cluster(irs, summary, args.out)
+        if rc != 0:
+            return rc
+    return 0
+
+
+def _render_cluster(irs, summary, out: str | None) -> int:
+    """Write a .rrd of the dominant cluster's source SceneIR (Rerun is optional/lazy -- no rerun-sdk
+    -> print the install hint, non-zero, never a fake render). Renders the first log that owns a
+    cluster frame; the cluster's frame_indices are noted in the summary for navigation."""
+    from prism.adapters.rerun_adapter import RerunNotInstalled, to_rerun
+
+    c0 = summary["clusters"][0]
+    target_log = None
+    for ir in irs:
+        lid = ir.provenance.log_id if ir.provenance else ir.name
+        if any(cand_log == lid for cand_log in [c0["name"].split("@")[0]]) or len(irs) == 1:
+            target_log = ir
+            break
+    target_log = target_log or irs[0]
+    path = out or f"{target_log.name}_{c0['signature']}.rrd"
+    try:
+        written = to_rerun(target_log, path)
+    except RerunNotInstalled as e:
+        print(str(e))
+        return 2
+    print(json.dumps({"render": "rerun", "cluster": c0["name"], "written": str(written)}, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="prism", description="spatial-probe: query, ingest, export a Scene IR")
     sub = p.add_subparsers(dest="command", required=True)
@@ -229,6 +319,20 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--out", default=None, help="output .rrd path; default = <scene>.rrd")
     v.add_argument("--max-points", dest="max_points", type=int, default=None, help="cap occupancy points per frame (view-only decimation)")
     v.set_defaults(func=_cmd_view)
+
+    f = sub.add_parser("find", help="S6: map a natural-ish query to a failure signature, mine, summarize")
+    f.add_argument("query", help='e.g. "path blocked but no tracked object explains it"')
+    f.add_argument("--data", required=True, help="AV2 log dir, Occ3D root, or the av2_sensor corpus root")
+    f.add_argument("--scene", default=None, help="scene name (Occ3D); default = first scene")
+    f.add_argument("--horizon", type=float, default=1.0, help="ego forward look-ahead seconds for the path block")
+    f.add_argument("--box-radius", dest="box_radius", type=float, default=5.0, help="a box within this many m EXPLAINS a block")
+    f.add_argument("--n-interior-min", dest="n_interior_min", type=int, default=5, help="LiDAR-seen gate for box_in_free")
+    f.add_argument("--limit-frames", dest="limit_frames", type=int, default=None, help="cap frames per log (faster scan)")
+    f.add_argument("--render", default=None, choices=["rerun"], help="optional: write a .rrd of the dominant cluster")
+    f.add_argument("--out", default=None, help="output .rrd path when --render rerun")
+    f.add_argument("--json", dest="json_only", action="store_true", help="print ONLY the structured JSON")
+    f.add_argument("--no-json", dest="no_json", action="store_true", help="print ONLY the human summary")
+    f.set_defaults(func=_cmd_find)
     return p
 
 

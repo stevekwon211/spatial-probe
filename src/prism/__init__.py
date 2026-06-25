@@ -25,6 +25,18 @@ from prism.ir import (
     SceneIR,
     Track,
 )
+from prism.failure import (
+    SIGNATURES,
+    FailureCandidate,
+    FailureCluster,
+    Signature,
+    cluster,
+    find,
+    mine,
+    resolve_signature,
+    signature_for_query,
+    similar_frames,
+)
 from prism.predicates import object_speed, occluded, ttc, velocity
 from prism.query import QueryResult, query
 from prism.serialize import (
@@ -64,4 +76,14 @@ __all__ = [
     "object_speed",
     "ttc",
     "velocity",
+    "SIGNATURES",
+    "Signature",
+    "FailureCandidate",
+    "FailureCluster",
+    "mine",
+    "cluster",
+    "similar_frames",
+    "find",
+    "resolve_signature",
+    "signature_for_query",
 ]
