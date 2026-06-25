@@ -79,6 +79,13 @@ npx tsc --noEmit   # typecheck — there is NO `typecheck` npm script
   movable number; never compare the same metric across different split/modality/supervision.
 - Web reads `experiments/<name>/results/*.json` (intended to be copied into `web/public/data/` at build — that copy step is NOT yet wired and `web/public/data/` does not exist yet). No
   database — it serves precomputed static files. Vercel root directory = `web`.
+- **Code-presence / LOC / result-existence / "stage X is done|unbuilt" claims MUST cite a content
+  scan run THIS session (`ls`/`find`/`wc -l`/`git log`), NEVER a doc's self-description or a prior
+  agent's summary. Code ground-truth wins over doc claims — flag discrepancies loudly.** When fanning
+  out research subagents, the orchestrator runs the scan first and hands every agent the verified
+  inventory; each agent labels findings [CONFIRMED]/[INFERENCE]/[UNVERIFIED]. (This enforces the global
+  "Proxy is a hypothesis" rule at the fan-out boundary — the gap that let a stale "only occquery has
+  code" claim through once.)
 
 ## Env / secrets
 
