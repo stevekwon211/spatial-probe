@@ -213,6 +213,125 @@ def un_letterbox_depth(depth_net: np.ndarray, lb: Letterbox) -> np.ndarray:
 
 
 # ----------------------------------------------------------------------------------------------
+# GROUND-PLANE per-frame scale correction (v3.1 pre-reg `oracle_depth_recall_v2_preregistration.md`).
+#
+# v3 returned INVALID-SCALE: DAv2-VKITTI metric is RELATIVE-correct but ABSOLUTE-over by ~1.65x on AV2.
+# This stage estimates a per-frame multiplicative scale `s` from a source that NEVER touches the LiDAR
+# being graded -- ONLY the camera intrinsics K, the camera ego-frame height h from the calibration
+# extrinsic (egovehicle_SE3_sensor, NOT LiDAR), a flat-ground prior on a lower-center image wedge, and
+# the DAv2 depth image. `Z_corrected = s * Z_DAv2` is then emitted everywhere downstream.
+#
+# INDEPENDENCE GUARD (pre-reg ledger preserved): `ground_plane_scale` takes ONLY (depth_und, cam) and a
+# few scalar config knobs. It is STRUCTURALLY incapable of reading a LiDAR sweep / occupancy grid -- no
+# `scene`, `grid`, `av2_sensor.load_*`, or sweep path is in scope here. The estimate uses K (via the
+# (u-cx)/fx form, same as backproject_to_ego), R_cam2ego + h (the extrinsic), flat-ground (z=0), and the
+# DAv2 image. The self-check asserts this funnel touches no sweep/occupancy. See SPEC-NOTE below.
+#
+# SPEC-NOTE (Z_geo optical-axis derivation): for an undistorted pixel (u,v) the camera-frame ray
+# direction with UNIT optical-axis component is d_cam = (xn, yn, 1), xn=(u-cx)/fx, yn=(v-cy)/fy (the
+# exact normalized coords backproject_to_ego uses). In ego: d_ego = R_cam2ego @ d_cam. A point at
+# optical-axis depth Z sits at ego-z = h + Z*d_ego_z (h = camera height = t_cam_in_ego[2]). The flat
+# ground is ego-z = 0, so 0 = h + Z_geo*d_ego_z => Z_geo = h / (-d_ego_z), valid only where d_ego_z < 0
+# (ray points down). Because d_cam already has unit z-component, Z_geo IS the optical-axis depth -- the
+# SAME quantity DAv2 emits and backproject_to_ego consumes (the pre-reg's "optical-axis component"
+# factor is 1 in this parameterization). Verified on real calib: a lower-center road pixel back-projects
+# to ego-z = 0.0 at Z_geo. The pre-reg phrasing `Z_geo = h/(-d_ego,z) * (optical-axis component)` is
+# this, with the factor = 1.
+# ----------------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class GroundScale:
+    """Per-frame ground-plane scale result. `valid` False => frame dropped from the estimand (logged)."""
+    s: float                 # multiplicative scale: Z_corrected = s * Z_DAv2  (NaN if invalid)
+    valid: bool              # >= n_road_min valid road pixels AND s in (s_lo, s_hi)
+    n_road: int              # number of road-prior pixels with finite positive Z_geo and Z_DAv2
+    reason: str              # "" if valid, else why dropped (logged, no silent fallback)
+
+
+# Road-prior wedge (flat-ground prior; NO segmentation, NO LiDAR) -- pre-reg fractions, sealed.
+_ROAD_V_LO, _ROAD_V_HI = 0.75, 0.97   # v in [0.75*H, 0.97*H]
+_ROAD_U_LO, _ROAD_U_HI = 0.35, 0.65   # u in [0.35*W, 0.65*W]
+_ROAD_N_MIN = 50                       # pre-reg "fewer than ~50 valid road pixels" => scale-invalid
+_SCALE_LO, _SCALE_HI = 0.3, 3.0        # pre-reg s must lie in (0.3, 3.0) else scale-invalid
+
+
+def ground_plane_scale(depth_und: np.ndarray, cam: AV2Camera,
+                       n_road_min: int = _ROAD_N_MIN,
+                       s_lo: float = _SCALE_LO, s_hi: float = _SCALE_HI) -> GroundScale:
+    """Per-frame multiplicative scale s = median(Z_geo / Z_DAv2) over flat-ground road-prior pixels.
+
+    INPUTS (independence-preserving, NO LiDAR/occupancy): the undistorted DAv2 depth map `depth_und`
+    (H,W meters, optical-axis Z) + the camera calibration `cam` (intrinsics K via (u-cx)/fx, the
+    extrinsic R_cam2ego, and the ego-frame camera height h = |t_cam_in_ego[2]|). This function has NO
+    access to any sweep / occupancy / scene object -- the independence guard is the signature itself.
+
+    Road prior: undistorted pixels with v in [0.75H,0.97H], u in [0.35W,0.65W] (lower-center wedge, a
+    flat-ground prior -- no segmentation). For each such pixel: d_cam=((u-cx)/fx,(v-cy)/fy,1),
+    d_ego=R_cam2ego@d_cam; if d_ego_z<0 (ray points down) the geometric optical-axis depth to ground
+    z=0 is Z_geo = h/(-d_ego_z) (see SPEC-NOTE above). s = median(Z_geo/Z_DAv2) over pixels with finite
+    positive Z_geo AND finite positive in-range DAv2 Z. Guard: < n_road_min valid pixels OR s not in
+    (s_lo,s_hi) => valid=False (frame dropped, reason logged; explicit, no silent fallback)."""
+    H, W = depth_und.shape
+    h = float(abs(cam.t_cam_in_ego[2]))  # camera ego-frame height (extrinsic, NOT LiDAR)
+    v0, v1 = int(round(_ROAD_V_LO * H)), int(round(_ROAD_V_HI * H))
+    u0, u1 = int(round(_ROAD_U_LO * W)), int(round(_ROAD_U_HI * W))
+    vv, uu = np.mgrid[v0:v1, u0:u1]
+    uu = uu.astype(float).ravel()
+    vv = vv.astype(float).ravel()
+    # camera-frame ray dirs with UNIT optical-axis component (same normalized coords as backproject_to_ego)
+    xn = (uu - cam.cx) / cam.fx
+    yn = (vv - cam.cy) / cam.fy
+    d_cam = np.stack([xn, yn, np.ones_like(xn)], axis=-1)        # (M,3), unit z-component
+    d_ego = (cam.R_cam2ego @ d_cam.T).T                          # (M,3) ego-frame ray dirs
+    d_ego_z = d_ego[:, 2]
+    z_dav2 = depth_und[vv.astype(np.intp), uu.astype(np.intp)]   # DAv2 optical-axis Z at each road pixel
+    down = d_ego_z < 0.0                                         # ray must point at the ground
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z_geo = np.where(down, h / (-d_ego_z), np.nan)           # geometric optical-axis depth to z=0
+    valid_px = (np.isfinite(z_geo) & (z_geo > 0) &
+                np.isfinite(z_dav2) & (z_dav2 > 0))
+    n_road = int(valid_px.sum())
+    if n_road < n_road_min:
+        return GroundScale(s=float("nan"), valid=False, n_road=n_road,
+                           reason=f"only {n_road} valid road pixels (< {n_road_min})")
+    s = float(np.median(z_geo[valid_px] / z_dav2[valid_px]))
+    if not (s_lo < s < s_hi):
+        return GroundScale(s=s, valid=False, n_road=n_road,
+                           reason=f"scale {s:.4f} outside ({s_lo},{s_hi})")
+    return GroundScale(s=s, valid=True, n_road=n_road, reason="")
+
+
+def apply_ground_scale(depth_und: np.ndarray, cam: AV2Camera,
+                       n_road_min: int = _ROAD_N_MIN) -> tuple[np.ndarray, GroundScale]:
+    """Compute the per-frame ground-plane scale and return (Z_corrected, GroundScale).
+
+    If valid: Z_corrected = s * depth_und applied to ALL pixels that frame. If invalid: returns an
+    all-NaN depth map (so the frame contributes ZERO depth_struct -> effectively dropped from the
+    estimand) plus the GroundScale with reason; the caller logs the drop. This is the explicit
+    no-silent-fallback path: an invalid-scale frame produces no surface rather than a wrong-scale one."""
+    gs = ground_plane_scale(depth_und, cam, n_road_min=n_road_min)
+    if not gs.valid:
+        return np.full_like(depth_und, np.nan), gs
+    return depth_und * gs.s, gs
+
+
+def corrected_depth(net: "DepthNet", rgb_und: np.ndarray, cam: AV2Camera,
+                    rescale: str) -> tuple[np.ndarray, "GroundScale | None"]:
+    """THE single funnel that turns an undistorted RGB image into the depth map every downstream stage
+    consumes. `rescale="none"` => the EXACT v3 raw DAv2 metric depth (current behavior, preserved bit-
+    for-bit). `rescale="ground-plane"` => v3.1: raw DAv2 depth * per-frame ground-plane scale s, with
+    invalid-scale frames returned as all-NaN (dropped). Both compute_frame and the band-local null call
+    THIS, so the null acts on the SAME corrected depth as the true path (no scale drift between them).
+
+    NOTE (independence): the ground-plane branch reaches ground_plane_scale(depth_und, cam) only -- the
+    scale path never sees a sweep/occupancy here either. Returns (depth_for_downstream, GroundScale|None)
+    where the GroundScale is None when rescale='none'."""
+    depth_und, _lb = net.depth_undistorted(rgb_und)
+    if rescale == "ground-plane":
+        return apply_ground_scale(depth_und, cam)
+    return depth_und, None
+
+
+# ----------------------------------------------------------------------------------------------
 # DAv2 ONNX depth (the ONLY new pipeline stage vs the stereo oracle).
 # ----------------------------------------------------------------------------------------------
 class DepthNet:
@@ -306,6 +425,8 @@ class FrameResult:
     depth_valid_frac: float  # in-band depth-valid fraction (clear-frame filter)
     dropped: bool          # clear-frame filter dropped this frame
     shuf_rate: float = float("nan")
+    scale_s: float = float("nan")   # per-frame ground-plane scale (v3.1; NaN if rescale=none/invalid)
+    scale_invalid: bool = False     # ground-plane scale invalid -> frame dropped from estimand (logged)
 
 
 def _depth_struct_in_band(depth_und: np.ndarray, camL_full: AV2Camera, bf: np.ndarray,
@@ -353,12 +474,17 @@ def compute_frame(log: str, ts: int, rgb_raw: np.ndarray, camL_full: AV2Camera, 
     compute_frame; the depth stage (block-match) is replaced by the DAv2 call."""
     # (a) undistort the raw RGB to the pinhole frame (reused maps; reused remap_gray per channel)
     rgb_und = undistort_rgb(rgb_raw, map_u, map_v)
-    # (b) DAv2 metric depth on the undistorted grid (letterbox in, un-letterbox out)
-    depth_und, _lb = net.depth_undistorted(rgb_und)
+    # (b) DAv2 metric depth on the undistorted grid, then v3.1 ground-plane rescale (none => raw v3)
+    depth_und, gs = corrected_depth(net, rgb_und, camL_full, cfg.rescale)
+    s_val = gs.s if gs is not None else float("nan")
+    # (b0) scale-invalid frames (v3.1): depth is all-NaN -> drop from estimand, log explicitly
+    if gs is not None and not gs.valid:
+        return FrameResult(log, ts, 0, 0, float("nan"), 0, 0.0, dropped=True,
+                           scale_s=s_val, scale_invalid=True)
     # (b') clear-frame filter (declared confound: drop both-fail/dark frames)
     dvf = _in_band_depth_valid_frac(depth_und, camL_full, cfg)
     if dvf < cfg.clear_frame_min:
-        return FrameResult(log, ts, 0, 0, float("nan"), 0, dvf, dropped=True)
+        return FrameResult(log, ts, 0, 0, float("nan"), 0, dvf, dropped=True, scale_s=s_val)
     # (c) depth_struct band∩FOV (single funnel shared with the null)
     struct_bev, struct_in_band = _depth_struct_in_band(depth_und, camL_full, bf, cfg)
     occ_bev = occupancy_bev(grid, cfg.z_max)
@@ -369,7 +495,7 @@ def compute_frame(log: str, ts: int, rgb_raw: np.ndarray, camL_full: AV2Camera, 
     n_miss = int(miss.sum())
     n_occ_band = int((occ_bev & bf).sum())
     rate = (n_miss / n_struct) if n_struct > 0 else float("nan")
-    return FrameResult(log, ts, n_struct, n_miss, rate, n_occ_band, dvf, dropped=False)
+    return FrameResult(log, ts, n_struct, n_miss, rate, n_occ_band, dvf, dropped=False, scale_s=s_val)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -384,11 +510,18 @@ def run_scale_gate(logs: list[str], data_root: pathlib.Path, net: DepthNet, cfg:
     Box range = the box-center camera-frame Z (range to the surface the net should report). DAv2
     depth at the box projection = the median over a small window around the projected box center
     (robust to the exact center pixel). Boxes are used ONLY to validate the oracle's metric scale and
-    are NEVER part of the miss-rate estimand. Direction of error logged (signed median)."""
+    are NEVER part of the miss-rate estimand. Direction of error logged (signed median).
+
+    v3.1: with cfg.rescale='ground-plane' the depth compared here is Z_corrected = s * Z_DAv2 (the SAME
+    correction the estimand uses), so this is the Gate-1 RE-CHECK the v2 pre-reg asks for. The per-frame
+    scale s values are recorded and returned (frame_scales) for the report. Box-range/projection are
+    LiDAR-INDEPENDENT scale validators, unchanged from v3."""
     abs_errs: list[float] = []
     signed_errs: list[float] = []
     used = 0
     per_log: dict[str, int] = {}
+    frame_scales: list[float] = []       # per-frame ground-plane s seen (v3.1; empty if rescale=none)
+    n_scale_invalid_frames = 0           # frames dropped for invalid ground-plane scale (v3.1)
     for log in logs:
         log_dir = data_root / log
         camL_full, _camR, _B = load_stereo_calib(log, data_root)
@@ -420,7 +553,13 @@ def run_scale_gate(logs: list[str], data_root: pathlib.Path, net: DepthNet, cfg:
             cl = _nearest(camL_ts, ts)
             rgb_raw = _rgb_from_jpg(log_dir / "sensors" / "cameras" / cfg.camera / f"{cl}.jpg")
             rgb_und = undistort_rgb(rgb_raw, map_u, map_v)
-            depth_und, _lb = net.depth_undistorted(rgb_und)
+            # v3.1: corrected depth (Z_corrected = s*Z_DAv2) when rescale=ground-plane; raw v3 otherwise.
+            depth_und, gs = corrected_depth(net, rgb_und, camL_full, cfg.rescale)
+            if gs is not None:
+                frame_scales.append(gs.s)              # record the per-frame scale (NaN if invalid)
+                if not gs.valid:
+                    n_scale_invalid_frames += 1        # depth is all-NaN -> boxes below contribute 0
+                    continue                            # drop this frame's boxes (logged, explicit)
             H, W = depth_und.shape
             for c in cand:
                 u, v = float(uv[c, 0]), float(uv[c, 1])
@@ -441,7 +580,8 @@ def run_scale_gate(logs: list[str], data_root: pathlib.Path, net: DepthNet, cfg:
     median_abs = float(np.median(abs_errs)) if abs_errs else float("nan")
     median_signed = float(np.median(signed_errs)) if signed_errs else float("nan")
     invalid = bool(np.isfinite(median_abs) and median_abs > cfg.scale_gate_m)
-    return {
+    finite_scales = [s for s in frame_scales if np.isfinite(s)]
+    out = {
         "n_boxes": used,
         "per_log": per_log,
         "median_abs_err_m": median_abs,
@@ -450,7 +590,13 @@ def run_scale_gate(logs: list[str], data_root: pathlib.Path, net: DepthNet, cfg:
         "min_interior_pts": min_interior,
         "invalid_scale": invalid,
         "gate_pass": bool(np.isfinite(median_abs) and not invalid),
+        "rescale": cfg.rescale,
     }
+    if cfg.rescale == "ground-plane":
+        out["frame_scales"] = [round(float(s), 5) for s in frame_scales]   # per-frame s (NaN=invalid)
+        out["n_scale_invalid_frames"] = n_scale_invalid_frames
+        out["median_frame_scale"] = float(np.median(finite_scales)) if finite_scales else float("nan")
+    return out
 
 
 # ----------------------------------------------------------------------------------------------
@@ -492,7 +638,9 @@ def run_calibration_auc(data_root: pathlib.Path, net: DepthNet, cfg: "Config",
         for cam_ts, plist in frames.items():
             rgb_raw = _rgb_from_jpg(log_dir / "sensors" / "cameras" / cfg.camera / f"{cam_ts}.jpg")
             rgb_und = undistort_rgb(rgb_raw, map_u, map_v)
-            depth_und, _lb = net.depth_undistorted(rgb_und)
+            # v3.1: corrected depth (Z_corrected = s*Z_DAv2) when rescale=ground-plane; raw v3 otherwise.
+            # The estimand evidence count is on the SAME corrected depth the confirmatory thresholds.
+            depth_und, _gs = corrected_depth(net, rgb_und, camL_full, cfg.rescale)
             H, W = depth_und.shape
             # the SAME estimand filters, but we keep per-pixel so we can window-count + project.
             # A pixel contributes evidence iff: finite Z in [z_min,z_max] AND its back-projected ego
@@ -549,18 +697,22 @@ class Config:
     shuffles: int
     seed: int
     clear_frame_min: float = 0.30  # clear-frame filter: drop frames with in-band depth-valid frac < this
+    rescale: str = "none"          # {none, ground-plane}: per-frame ground-plane scale correction (v3.1)
 
 
 # ----------------------------------------------------------------------------------------------
 # Self-check (geometry + letterbox round-trip + ONNX-runs; no confirmatory data).
 # ----------------------------------------------------------------------------------------------
-def _self_check(logs: list[str], data_root: pathlib.Path, onnx_path: pathlib.Path) -> bool:
+def _self_check(logs: list[str], data_root: pathlib.Path, onnx_path: pathlib.Path,
+                rescale: str = "none") -> bool:
     """Validate the geometry chain + the NEW depth-stage transforms on REAL calibration. Prints each
     check + PASS/FAIL. Returns all-ok.
       (i)   ego 3D point round-trip < 0.1 m (reused backproject_to_ego / project_ego_to_left).
       (ii)  undistort -> re-distort a corner pixel < 0.5 px (reused Su model).
       (iii) letterbox -> un-letterbox round-trip < 1 px in the net grid (the NEW transform;
             pre-reg-required) + exact-inverse continuous check + un_letterbox_depth ramp-index proof.
+      (v)   v3.1 only (--rescale ground-plane): a real frame's ground-plane scale returns finite s in
+            (0.3,3.0) AND the scale path reads no sweep/occupancy (the independence guard).
       (iv)  ONNX runs and returns a (.,518,518) metric map with values in (0,80].
     """
     ok_all = True
@@ -668,8 +820,51 @@ def _self_check(logs: list[str], data_root: pathlib.Path, onnx_path: pathlib.Pat
           f"un-letterbox undistorted-grid {depth_und.shape}, finite px={inband_und.size} "
           f"-> {'PASS' if ok_iv else 'FAIL'}")
 
+    # (v) v3.1 ground-plane scale check (only when requested): finite s in (0.3,3.0) on a real frame
+    #     AND the scale path reads NO LiDAR/sweep/occupancy (the pre-reg independence guard, asserted).
+    if rescale == "ground-plane":
+        import inspect
+        import io
+        import tokenize
+        # (v-a) INDEPENDENCE GUARD (source-level): the scale function's CODE must not name any LiDAR /
+        # occupancy / sweep symbol. A structural proof the scale path cannot read the graded modality --
+        # it fails the self-check if a future edit wires one in. We scan NAME/OP tokens only (comments
+        # and docstrings stripped via tokenize), so the prose "uses NO LiDAR" in the docstring does NOT
+        # false-trip the guard -- only real identifier references count.
+        def _code_identifiers(fn) -> set[str]:
+            toks: set[str] = set()
+            for tok in tokenize.generate_tokens(io.StringIO(inspect.getsource(fn)).readline):
+                if tok.type in (tokenize.NAME, tokenize.OP):
+                    toks.add(tok.string)
+            # drop string/comment tokens implicitly (only NAME/OP kept); join NAME chains for attr checks
+            return toks
+        ids = _code_identifiers(ground_plane_scale) | _code_identifiers(apply_ground_scale)
+        forbidden = ["sweep", "lidar", "occupancy", "occ_bev", "occ_free", "load_scene",
+                     "av2_sensor", "_voxelize", "scene", "grid"]
+        hits = [tok for tok in forbidden if tok in ids]  # exact identifier match (no substring/prose)
+        ok_v_indep = (len(hits) == 0)
+        ok_all &= ok_v_indep
+        print(f"  (v-a) independence guard: ground_plane_scale/apply_ground_scale CODE identifiers name "
+              f"NO {forbidden} (comments/docstrings stripped) -> hits={hits} "
+              f"-> {'PASS' if ok_v_indep else 'FAIL'}")
+        # (v-b) RUNTIME: scale on a real frame, computed from ONLY (depth_und, camL) -- no sweep/grid in
+        # scope -- returns finite s in (0.3,3.0).
+        gs = ground_plane_scale(depth_und, camL)
+        ok_v_run = bool(gs.valid and np.isfinite(gs.s) and (_SCALE_LO < gs.s < _SCALE_HI))
+        ok_all &= ok_v_run
+        # prove the corrected depth halves the over-estimate direction (informational): a road pixel's
+        # corrected depth vs raw, at the wedge center.
+        Hd, Wd = depth_und.shape
+        rc_v, rc_u = int(round(0.9 * Hd)), int(round(0.5 * Wd))
+        raw_c = float(depth_und[rc_v, rc_u]); corr_c = raw_c * gs.s if gs.valid else float("nan")
+        print(f"  (v-b) ground-plane scale on real frame: s={gs.s:.5f} (valid={gs.valid}, "
+              f"n_road={gs.n_road}, in ({_SCALE_LO},{_SCALE_HI})={_SCALE_LO < gs.s < _SCALE_HI}); "
+              f"road-center raw Z={raw_c:.2f}m -> corrected {corr_c:.2f}m "
+              f"-> {'PASS' if ok_v_run else 'FAIL'}")
+
     print(f"\n  SELF-CHECK {'PASSED' if ok_all else 'FAILED'} "
-          f"(geometry + letterbox + ONNX {'within tolerance' if ok_all else 'OUT OF TOLERANCE'})")
+          f"(geometry + letterbox + ONNX{' + ground-plane' if rescale == 'ground-plane' else ''} "
+          f"{'within tolerance' if ok_all else 'OUT OF TOLERANCE'})")
     return ok_all
 
 
@@ -695,7 +890,7 @@ def _run_log(log: str, cfg: Config, data_root: pathlib.Path, net: DepthNet,
         if (not fr.dropped) and fr.n_struct > 0:
             # band-local null on the SAME depth_struct map (recompute the shared masks once)
             rgb_und = undistort_rgb(rgb_raw, map_u, map_v)
-            depth_und, _lb = net.depth_undistorted(rgb_und)
+            depth_und, _gs = corrected_depth(net, rgb_und, camL_full, cfg.rescale)  # SAME corrected depth
             _struct_bev, si_band = _depth_struct_in_band(depth_und, camL_full, bf, cfg)
             occ_bev = occupancy_bev(grid, cfg.z_max)
             occ_in_band = int((occ_bev & bf).sum())
@@ -806,7 +1001,7 @@ def _cfg_dict(cfg: Config) -> dict:
     return {"z_min": cfg.z_min, "z_max": cfg.z_max, "n_depth_min": cfg.n_depth_min,
             "camera": cfg.camera, "onnx": str(cfg.onnx), "scale_gate_m": cfg.scale_gate_m,
             "auc_gate": cfg.auc_gate, "null": cfg.null, "shuffles": cfg.shuffles, "seed": cfg.seed,
-            "clear_frame_min": cfg.clear_frame_min}
+            "clear_frame_min": cfg.clear_frame_min, "rescale": cfg.rescale}
 
 
 # ----------------------------------------------------------------------------------------------
@@ -831,8 +1026,12 @@ def _build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--clear-frame-min", type=float, default=0.30,
                     help="clear-frame filter: drop frames with in-band depth-valid fraction below this")
+    ap.add_argument("--rescale", default="none", choices=["none", "ground-plane"],
+                    help="per-frame depth scale correction: 'none' = v3 raw DAv2 metric (default, "
+                         "preserved); 'ground-plane' = v3.1 LiDAR-independent ground-plane scale "
+                         "(Z_corrected = s * Z_DAv2)")
     ap.add_argument("--out", type=pathlib.Path,
-                    default=_HERE / "results" / "oracle_depth_recall.json")
+                    default=_HERE / "results" / "oracle_depth_recall_v2.json")
     ap.add_argument("--data-root", type=pathlib.Path, default=_AV2)
     ap.add_argument("--calib-json", type=pathlib.Path,
                     default=_HERE / "results" / "calib_patches" / "calib_patches.json",
@@ -849,6 +1048,7 @@ def _cfg_from_args(args) -> Config:
         z_min=args.z_min, z_max=args.z_max, n_depth_min=args.n_depth_min, camera=args.camera,
         onnx=args.onnx, scale_gate_m=args.scale_gate_m, auc_gate=args.auc_gate, null=args.null,
         shuffles=args.shuffles, seed=args.seed, clear_frame_min=args.clear_frame_min,
+        rescale=args.rescale,
     )
 
 
@@ -857,17 +1057,24 @@ def main(argv: list[str] | None = None) -> None:
     cfg = _cfg_from_args(args)
 
     if args.self_check:
-        print("DEPTH RECALL ORACLE -- self-check (real calibration + ONNX, no confirmatory data):")
-        ok = _self_check(args.logs, args.data_root, args.onnx)
+        print(f"DEPTH RECALL ORACLE -- self-check (real calibration + ONNX, no confirmatory data; "
+              f"rescale={cfg.rescale}):")
+        ok = _self_check(args.logs, args.data_root, args.onnx, rescale=cfg.rescale)
         sys.exit(0 if ok else 1)
 
     if args.scale_check:
-        print("DEPTH RECALL ORACLE -- Gate 1 metric-scale falsifier (annotation boxes; no miss-rate):")
+        print(f"DEPTH RECALL ORACLE -- Gate 1 metric-scale falsifier (annotation boxes; no miss-rate; "
+              f"rescale={cfg.rescale}):")
         net = DepthNet(args.onnx)
         scale = run_scale_gate(args.logs, args.data_root, net, cfg)
         print(f"  n_boxes={scale['n_boxes']} per_log={scale['per_log']}")
-        print(f"  median |DAv2 - box_range| = {scale['median_abs_err_m']:.4f} m "
-              f"(signed median {scale['median_signed_err_m']:+.4f} m; >0 = DAv2 farther)")
+        if cfg.rescale == "ground-plane":
+            fs = scale.get("frame_scales", [])
+            print(f"  per-frame ground-plane scale s: median={scale.get('median_frame_scale'):.4f} "
+                  f"n_frames={len(fs)} n_scale_invalid={scale.get('n_scale_invalid_frames')}")
+            print(f"  frame_scales={fs}")
+        print(f"  median |Z_corrected - box_range| = {scale['median_abs_err_m']:.4f} m "
+              f"(signed median {scale['median_signed_err_m']:+.4f} m; >0 = depth farther than box)")
         print(f"  gate: <= {scale['scale_gate_m']} m -> "
               f"{'PASS (scale valid)' if scale['gate_pass'] else 'INVALID-SCALE (STOP)'}")
         sys.exit(0 if scale["gate_pass"] else 2)

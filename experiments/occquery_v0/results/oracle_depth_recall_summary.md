@@ -41,3 +41,30 @@ of the LiDAR being graded restores the oracle without circularity:
 
 This run is honest and uncontaminated: the seal (95ecfe4) preceded the run; Gate 1 short-circuited before
 any miss-rate computation; result.json records INVALID-SCALE.
+
+## v3.1 — ground-plane rescale ALSO INVALID-SCALE (sealed 0f6f79e, run 2026-06-26)
+The independence-preserving fix (per-frame scale from camera height + flat-ground ray geometry, NO LiDAR —
+independence guard verified: the scale function's source names zero LiDAR/occupancy identifiers) was sealed
+and run. **Verdict: INVALID-SCALE again, median |Z_corrected − box_range| = 9.31 m ≫ 0.5 m.** The
+diagnostic is the deeper finding: the road-prior gives s≈0.34 (DAv2 over-estimates the near road ~3×) while
+the per-box ratio is only ~0.9–1.8× — **DAv2-VKITTI depth is not globally scale-consistent across the AV2
+scene (near-road vs obstacle scale differently)**, so NO single per-frame multiplicative scale can fix it.
+Confirmed not-a-bug: `--rescale none` still returns v3's exact +9.84 m (harness sound); a synthetic
+flat-ground case recovers the exact scale (1/1.65). A reachable pre-registered kill, reported straight.
+
+## CONSOLIDATED CONCLUSION — external cross-modal recall is NOT solo/CPU-achievable here
+Two independent depth modalities, both pre-registered, both killed honestly:
+- **Classical stereo** (exact metric scale from the 0.5 m baseline) → killed on DENSITY: AUC 0.259, too
+  sparse on textureless/dark vehicle backs.
+- **Frozen mono-depth DAv2-VKITTI** (dense structure) → killed on SCALE: not metrically self-consistent on
+  AV2 (road vs obstacle), absolute and ground-plane-rescaled both > 9 m error.
+The two failure modes are complementary and a fusion (stereo-anchored DAv2 rescale) cannot close them,
+because the inconsistency is *relative* (region-dependent), not a global factor — fixing it per-region = the
+dense stereo that already failed. **So on the AV2 stop-and-go FOLLOWING substrate, solo/CPU external
+cross-modal recall is not achievable with available methods.** A negative is the headline.
+
+**Net program status for denotation-honesty:** FP-side = EXTERNAL + RELIABLE (traversal-v0.1). Recall-side =
+CONSISTENCY-ONLY (box-recall, same-modality) — external recall route is honestly closed for this
+substrate/hardware and deferred to a future GPU/free-driving path (trained AV-domain metric depth, or a
+free-driving substrate where stereo is dense enough). The PRISM+alpha denotation-honesty wedge therefore
+ships HALF-external (FP) + HALF-consistency (recall), stated plainly — not inflated to "verified recall."
