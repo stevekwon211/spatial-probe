@@ -1,0 +1,43 @@
+{
+  "schema": "prism_frames_manifest/v1",
+  "frames": [
+    {
+      "signature": "missed_detection",
+      "log": "6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c",
+      "frame_index": 0,
+      "cam_timestamp_ns": 315970475049927218,
+      "n_detected": 7,
+      "n_missed": 3,
+      "png": "frames/missed_detection_6aaf5b08_f0.jpg",
+      "caption": "missed_detection -- log 6aaf5b08 frame 0 (cam ts 315970475049927218). The COCO-YOLOv8n detector output 7 detections (green) but FAILED to see 3 camera-visible GT object(s) (red): pedestrian@35m; pedestrian@48m; pedestrian@36m. Honest: cross-distribution recall (COCO model, not trained on AV2), coarse class map (car/bus/truck -> vehicle), class-agnostic match; a miss = the detector's recall failure, NOT an occupancy claim."
+    },
+    {
+      "signature": "missed_detection",
+      "log": "201fe83b-7dd7-38f4-9d26-7b4a668638a9",
+      "frame_index": 8,
+      "cam_timestamp_ns": 315969615649927216,
+      "n_detected": 6,
+      "n_missed": 2,
+      "png": "frames/missed_detection_201fe83b_f8.jpg",
+      "caption": "missed_detection -- log 201fe83b frame 8 (cam ts 315969615649927216). The COCO-YOLOv8n detector output 6 detections (green) but FAILED to see 2 camera-visible GT object(s) (red): vehicle@31m; vehicle@40m. Honest: cross-distribution recall (COCO model, not trained on AV2), coarse class map (car/bus/truck -> vehicle), class-agnostic match; a miss = the detector's recall failure, NOT an occupancy claim."
+    },
+    {
+      "signature": "missed_detection",
+      "log": "2c652f9e-8db8-3572-aa49-fae1344a875b",
+      "frame_index": 52,
+      "cam_timestamp_ns": 315966684149927209,
+      "n_detected": 8,
+      "n_missed": 2,
+      "png": "frames/missed_detection_2c652f9e_f52.jpg",
+      "caption": "missed_detection -- log 2c652f9e frame 52 (cam ts 315966684149927209). The COCO-YOLOv8n detector output 8 detections (green) but FAILED to see 2 camera-visible GT object(s) (red): vehicle@48m; vehicle@59m. Honest: cross-distribution recall (COCO model, not trained on AV2), coarse class map (car/bus/truck -> vehicle), class-agnostic match; a miss = the detector's recall failure, NOT an occupancy claim."
+    },
+    {
+      "signature": "path_blocked_no_box",
+      "log": "78683234-e6f1-3e4e-af52-6f839254e4c0",
+      "frame_index": 66,
+      "block_forward_m": 4.200000000000003,
+      "png": "frames/path_blocked_no_box_78683234_f66_bev.png",
+      "caption": "path_blocked_no_box -- log 78683234 frame 66 (LiDAR-only, no camera; BEV render). Occupancy obstacle voxels (gray) block the ego in-path band (blue) at ~4.2 m forward (red star), and NO tracked box (blue rect) within 5 m explains it. This is the H1 expressivity win a box-only language is structurally blind to: either a REAL unboxed obstacle or an occupancy FP -- and the traversal oracle (RELIABLE) says occupancy does NOT hallucinate obstacles on the driven path, so a real unboxed obstacle is the likelier reading. honesty tag: external-fp."
+    }
+  ]
+}

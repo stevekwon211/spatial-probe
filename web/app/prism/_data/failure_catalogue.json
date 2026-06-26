@@ -1,0 +1,454 @@
+{
+  "schema": "prism_failure_catalogue/v1",
+  "generated_by": "experiments/occquery_v0/build_prism_demo.py",
+  "data_root": "/Users/doeonkwon/Projects/Personal/spatial-probe/data/danger/av2_sensor",
+  "demo_scope": {
+    "missed_detection": {
+      "logs": [
+        "6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c",
+        "201fe83b-7dd7-38f4-9d26-7b4a668638a9",
+        "2c652f9e-8db8-3572-aa49-fae1344a875b"
+      ],
+      "stride": 5,
+      "note": "3 AV2 camera logs (the only logs with sensors/cameras + calibration); frame stride to bound CPU detector runtime (~3.4 s/img)."
+    },
+    "path_blocked_no_box": {
+      "logs": [
+        "78683234-e6f1-3e4e-af52-6f839254e4c0",
+        "070bbf42-31d3-3aa9-aca4-c262afc9077d",
+        "0b5142c1-420b-3fea-9e98-b87327ae22c6",
+        "0fb7276f-ecb5-3e5b-87a8-cc74c709c715",
+        "19350c96-623d-4d77-af96-f8c23f00c358",
+        "2ff4f798-78d9-3384-87e9-61928aa4cb6d",
+        "51bbdd4d-3065-34ae-b369-b6e0444f34db",
+        "7039e410-b5ab-35aa-96bc-2c4b89d3c5e3"
+      ],
+      "stride": 1,
+      "note": "8 LiDAR-only AV2 logs, FULL scan (no stride). Incl. 78683234-... with the 1 known unboxed-obstacle at frame 66 (~4.2 m)."
+    },
+    "box_in_free": {
+      "logs": [
+        "78683234-e6f1-3e4e-af52-6f839254e4c0",
+        "070bbf42-31d3-3aa9-aca4-c262afc9077d",
+        "0b5142c1-420b-3fea-9e98-b87327ae22c6",
+        "0fb7276f-ecb5-3e5b-87a8-cc74c709c715",
+        "19350c96-623d-4d77-af96-f8c23f00c358",
+        "2ff4f798-78d9-3384-87e9-61928aa4cb6d",
+        "51bbdd4d-3065-34ae-b369-b6e0444f34db",
+        "7039e410-b5ab-35aa-96bc-2c4b89d3c5e3"
+      ],
+      "stride": 1,
+      "note": "same 8 LiDAR-only AV2 logs, FULL scan (no stride)."
+    },
+    "honest_caveat": "Demo scope is a BOUNDED SUBSET of the AV2 corpus (8 LiDAR logs + 3 camera logs, missed_detection strided). NOT a full-corpus sweep. Per-signature honesty tags are verbatim from src/prism/failure.py."
+  },
+  "signatures": {
+    "missed_detection": {
+      "signature": "missed_detection",
+      "description": "A camera-visible GT box the 2D detector failed to output a matching detection for.",
+      "honesty": "model-eval: COCO-YOLOv8n detector recall vs AV2 GT boxes; a miss = the detector failed to see a labeled object (Ramanagopal-style missed-detection); NOT an occupancy claim. Caveats: the detector is COCO-pretrained (NOT trained on AV2) so this is cross-distribution recall, not an in-domain benchmark; the COCO->AV2 class map is coarse (car/bus/truck -> vehicle); only camera-visible, in-range, COCO-detectable GT classes are scored; the ego-hood detector FP is filtered.",
+      "n_logs": 3,
+      "log_ids": [
+        "6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c",
+        "201fe83b-7dd7-38f4-9d26-7b4a668638a9",
+        "2c652f9e-8db8-3572-aa49-fae1344a875b"
+      ],
+      "stride": 5,
+      "n_frames_scanned": 96,
+      "n_candidates": 419,
+      "n_clusters": 19,
+      "mean_forward_range_m": 55.89,
+      "top_clusters": [
+        {
+          "name": "missed_detection@range_bin~76m_n81",
+          "size": 81,
+          "range_bin_m": 76.02,
+          "category": "vehicle",
+          "example_frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "example_logs": [
+            "201fe83b",
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~67m_n77",
+          "size": 77,
+          "range_bin_m": 67.48,
+          "category": "vehicle",
+          "example_frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "example_logs": [
+            "201fe83b",
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~35m_n48",
+          "size": 48,
+          "range_bin_m": 35.2,
+          "category": "pedestrian",
+          "example_frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "example_logs": [
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~52m_n38",
+          "size": 38,
+          "range_bin_m": 52.45,
+          "category": "vehicle",
+          "example_frames": [
+            1,
+            2,
+            10,
+            12,
+            13,
+            14
+          ],
+          "example_logs": [
+            "201fe83b",
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~60m_n37",
+          "size": 37,
+          "range_bin_m": 60.24,
+          "category": "vehicle",
+          "example_frames": [
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "example_logs": [
+            "201fe83b",
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~43m_n33",
+          "size": 33,
+          "range_bin_m": 42.81,
+          "category": "vehicle",
+          "example_frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "example_logs": [
+            "201fe83b",
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~37m_n14",
+          "size": 14,
+          "range_bin_m": 37.09,
+          "category": "vehicle",
+          "example_frames": [
+            9,
+            10,
+            12,
+            13,
+            14,
+            16
+          ],
+          "example_logs": [
+            "201fe83b",
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        },
+        {
+          "name": "missed_detection@range_bin~68m_n13",
+          "size": 13,
+          "range_bin_m": 67.59,
+          "category": "pedestrian",
+          "example_frames": [
+            13,
+            14,
+            18,
+            19,
+            20,
+            21
+          ],
+          "example_logs": [
+            "2c652f9e",
+            "6aaf5b08"
+          ]
+        }
+      ],
+      "scope_note": "3 camera logs, stride 5, class-agnostic match, score>=0.25.",
+      "mine_seconds": 5.5
+    },
+    "path_blocked_no_box": {
+      "signature": "path_blocked_no_box",
+      "description": "Occupancy blocks the ego in-path band where no tracked box within R m explains it.",
+      "honesty": "external-fp: the traversal-v0.1 oracle (sealed, RELIABLE) found occupancy does NOT hallucinate obstacles on the driven path -> a block-with-no-box is most likely a REAL unboxed obstacle a box-only language is blind to (H1 win), not a hallucination.",
+      "n_logs": 8,
+      "log_ids": [
+        "78683234-e6f1-3e4e-af52-6f839254e4c0",
+        "070bbf42-31d3-3aa9-aca4-c262afc9077d",
+        "0b5142c1-420b-3fea-9e98-b87327ae22c6",
+        "0fb7276f-ecb5-3e5b-87a8-cc74c709c715",
+        "19350c96-623d-4d77-af96-f8c23f00c358",
+        "2ff4f798-78d9-3384-87e9-61928aa4cb6d",
+        "51bbdd4d-3065-34ae-b369-b6e0444f34db",
+        "7039e410-b5ab-35aa-96bc-2c4b89d3c5e3"
+      ],
+      "stride": 1,
+      "n_frames_scanned": 1255,
+      "n_candidates": 1,
+      "n_clusters": 1,
+      "mean_forward_range_m": 4.2,
+      "top_clusters": [
+        {
+          "name": "path_blocked_no_box@range_bin~4m_n1",
+          "size": 1,
+          "range_bin_m": 4.2,
+          "category": "n/a",
+          "example_frames": [
+            66
+          ],
+          "example_logs": [
+            "78683234"
+          ]
+        }
+      ],
+      "scope_note": "8 LiDAR logs, full scan, horizon 1.0 s, box_radius 5 m.",
+      "mine_seconds": 4.4
+    },
+    "box_in_free": {
+      "signature": "box_in_free",
+      "description": "A LiDAR-seen (>=N interior pts) box whose above-road footprint occupancy marks FREE.",
+      "honesty": "consistency-only: the box-recall oracle is RECALL-SUPPORTED but SAME-MODALITY (gates on num_interior_pts, the same LiDAR the voxelizer reads); externally-independent recall is honestly CLOSED on this substrate (stereo AUC 0.259, DAv2 scale > 9 m). NOT external truth; the absolute count is inflated by the _ROAD_Z floor-straddle confound.",
+      "n_logs": 8,
+      "log_ids": [
+        "78683234-e6f1-3e4e-af52-6f839254e4c0",
+        "070bbf42-31d3-3aa9-aca4-c262afc9077d",
+        "0b5142c1-420b-3fea-9e98-b87327ae22c6",
+        "0fb7276f-ecb5-3e5b-87a8-cc74c709c715",
+        "19350c96-623d-4d77-af96-f8c23f00c358",
+        "2ff4f798-78d9-3384-87e9-61928aa4cb6d",
+        "51bbdd4d-3065-34ae-b369-b6e0444f34db",
+        "7039e410-b5ab-35aa-96bc-2c4b89d3c5e3"
+      ],
+      "stride": 1,
+      "n_frames_scanned": 1255,
+      "n_candidates": 3722,
+      "n_clusters": 86,
+      "mean_forward_range_m": 62.61,
+      "top_clusters": [
+        {
+          "name": "box_in_free@range_bin~52m_n299",
+          "size": 299,
+          "range_bin_m": 51.82,
+          "category": "vehicle",
+          "example_frames": [
+            1,
+            2,
+            5,
+            9,
+            10,
+            11
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0b5142c1",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~60m_n223",
+          "size": 223,
+          "range_bin_m": 60.05,
+          "category": "vehicle",
+          "example_frames": [
+            1,
+            2,
+            4,
+            5,
+            8,
+            9
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0b5142c1",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~44m_n222",
+          "size": 222,
+          "range_bin_m": 44.49,
+          "category": "pedestrian",
+          "example_frames": [
+            1,
+            2,
+            4,
+            9,
+            10,
+            15
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d",
+            "7039e410"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~76m_n210",
+          "size": 210,
+          "range_bin_m": 75.61,
+          "category": "vehicle",
+          "example_frames": [
+            1,
+            2,
+            4,
+            5,
+            9,
+            10
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0b5142c1",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~52m_n203",
+          "size": 203,
+          "range_bin_m": 51.68,
+          "category": "pedestrian",
+          "example_frames": [
+            1,
+            2,
+            10,
+            11,
+            15,
+            16
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d",
+            "7039e410"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~45m_n198",
+          "size": 198,
+          "range_bin_m": 44.66,
+          "category": "vehicle",
+          "example_frames": [
+            2,
+            4,
+            5,
+            8,
+            9,
+            10
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0b5142c1",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~68m_n173",
+          "size": 173,
+          "range_bin_m": 68.15,
+          "category": "vehicle",
+          "example_frames": [
+            1,
+            2,
+            4,
+            5,
+            9,
+            10
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0b5142c1",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d"
+          ]
+        },
+        {
+          "name": "box_in_free@range_bin~60m_n156",
+          "size": 156,
+          "range_bin_m": 59.76,
+          "category": "pedestrian",
+          "example_frames": [
+            1,
+            2,
+            4,
+            5,
+            10,
+            15
+          ],
+          "example_logs": [
+            "070bbf42",
+            "0b5142c1",
+            "0fb7276f",
+            "19350c96",
+            "2ff4f798",
+            "51bbdd4d"
+          ]
+        }
+      ],
+      "scope_note": "8 LiDAR logs, full scan, LiDAR-seen gate n_interior>=5.",
+      "mine_seconds": 0.2
+    }
+  }
+}

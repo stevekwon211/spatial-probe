@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft } from "lucide-react";
 import { getTranslations } from "next-intl/server";
@@ -8,6 +6,14 @@ import { LocaleToggle } from "@/components/locale-toggle";
 import { Metric } from "@/components/landing/metric";
 import { SectionLabel } from "@/components/landing/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
+// Demo data is imported at build time (bundled into the RSC) — NOT fs-read at runtime.
+// public/ is CDN-served on Vercel and not guaranteed on the serverless function fs, so a
+// static import is the build-safe load. The frame images stay in public/data/frames/ and
+// are referenced as /data/frames/* (CDN static); only this JSON moves into the bundle.
+import catalogueData from "./_data/failure_catalogue.json";
+import manifestData from "./_data/frames_manifest.json";
+import h3bData from "./_data/h3b_expressivity.json";
+import oracleStatusData from "./_data/oracle_status.json";
 
 export async function generateMetadata() {
   const t = await getTranslations("prism");
@@ -18,9 +24,9 @@ export async function generateMetadata() {
 }
 
 // ---------------------------------------------------------------------------
-// Data shapes — only the fields this page reads, typed from the JSON it loads.
-// The files live under web/public/data/ (also served at /data/*); we read them
-// from disk server-side at render so the page is a static RSC with no client fetch.
+// Data shapes — only the fields this page reads, typed from the imported JSON.
+// The source JSON lives under app/prism/_data/ and is bundled at build time, so
+// the page is a static RSC with no client fetch and no runtime fs access.
 // ---------------------------------------------------------------------------
 type Honesty = string;
 type SignatureScope = { logs: string[]; stride: number; note: string };
@@ -83,9 +89,11 @@ type Oracle = {
 };
 type OracleStatus = { note: string; oracles: Oracle[] };
 
-function readData<T>(file: string): T {
-  return JSON.parse(readFileSync(join(process.cwd(), "public", "data", file), "utf8")) as T;
-}
+// Bundled JSON is typed via the page's own shapes (the imports are structurally a superset).
+const catalogue = catalogueData as unknown as FailureCatalogue;
+const manifest = manifestData as unknown as FramesManifest;
+const h3b = h3bData as unknown as H3bExpressivity;
+const oracleStatus = oracleStatusData as unknown as OracleStatus;
 
 // ---------------------------------------------------------------------------
 // Layout tokens — reused verbatim from app/page.tsx so the page matches the site.
@@ -103,10 +111,6 @@ const HONESTY_KIND: Record<string, { labelKey: string; external: boolean }> = {
 
 export default async function PrismPage() {
   const t = await getTranslations();
-  const catalogue = readData<FailureCatalogue>("failure_catalogue.json");
-  const manifest = readData<FramesManifest>("frames_manifest.json");
-  const h3b = readData<H3bExpressivity>("h3b_expressivity.json");
-  const oracleStatus = readData<OracleStatus>("oracle_status.json");
 
   const missedFrames = manifest.frames.filter((f) => f.signature === "missed_detection");
   const bevFrame = manifest.frames.find((f) => f.signature === "path_blocked_no_box");

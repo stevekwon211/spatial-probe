@@ -1,5 +1,7 @@
-# datasets & model weights — never committed
-data/
+# datasets & model weights — never committed.
+# Anchored to repo root so it ONLY hides the top-level Python dataset dir; the web demo
+# data under web/public/data is governed by web/.gitignore (occquery ignored, frames committed).
+/data/
 *.pth
 *.ckpt
 *.npz
