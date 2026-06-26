@@ -269,3 +269,146 @@ def test_find_runs_on_real_av2_corpus():
     assert "human_summary" in out and isinstance(out["human_summary"], str)
     assert "clusters" in out
     assert "external" in out["honesty"].lower()
+
+
+# === missed_detection: 2D-detector recall vs GT (REAL model-eval) --------------------------------
+# Synthetic: build a forward-looking camera with no distortion so an ego box projects to a known 2D
+# box, then feed the signature synthetic detections. A GT box with NO matching detection -> flagged;
+# a GT box WITH a matching detection -> not flagged. No model file or onnxruntime needed.
+
+from prism.failure import AV2CameraCalib, match_detections, project_ego_boxes
+
+
+def _forward_camera() -> AV2CameraCalib:
+    # cam_x -> -ego_y (image right), cam_y -> -ego_z (image down), cam_z -> +ego_x (forward).
+    R = np.array([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]])
+    return AV2CameraCalib(
+        name="cam", fx=1000.0, fy=1000.0, cx=800.0, cy=600.0, k1=0.0, k2=0.0, k3=0.0,
+        width=1600, height=1200, R_cam2ego=R, t_cam_in_ego=np.zeros(3),
+    )
+
+
+class _FakeDetection:
+    """Duck-typed prism.detect.Detection (box_xyxy / center / av2_label / score)."""
+
+    def __init__(self, box, label, score):
+        self.box_xyxy = box
+        self.av2_label = label
+        self.score = score
+
+    @property
+    def center(self):
+        x0, y0, x1, y1 = self.box_xyxy
+        return ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+
+
+def _frame_with_box(center, label="vehicle"):
+    box = TrackedBox(center=center, size=(2.0, 2.0, 1.6), yaw=0.0, label=label)
+    return Frame(grid=_grid(_empty_occ()), ego=_ego(), time=0.0, objects=(box,))
+
+
+def test_missed_detection_flags_a_visible_gt_box_with_no_detection():
+    # A vehicle 10 m ahead projects into the camera; the detector returned NOTHING -> a missed detection.
+    ir = _scene_ir([_frame_with_box((10.0, 0.0, 0.0))])
+    cam = _forward_camera()
+    cands = mine([ir], "missed_detection",
+                 params={"camera_calib": cam, "detections": {0: []}})
+    assert len(cands) == 1
+    c = cands[0]
+    assert c.signature == "missed_detection"
+    assert c.frame_index == 0
+    assert "model-eval" in c.honesty.lower()  # REAL detector-eval, not occupancy
+    assert c.features["category_code"] == 1.0  # vehicle
+    assert math.isfinite(c.features["forward_range_m"])
+
+
+def test_missed_detection_is_silent_when_a_matching_detection_exists():
+    # Same box, but the detector output a matching vehicle detection on it -> NOT a miss.
+    ir = _scene_ir([_frame_with_box((10.0, 0.0, 0.0))])
+    cam = _forward_camera()
+    vis, box2d, _ = project_ego_boxes(ir.scene.objects_at(0), cam)[0]
+    det = _FakeDetection(box2d, "vehicle", 0.9)
+    cands = mine([ir], "missed_detection",
+                 params={"camera_calib": cam, "detections": {0: [det]}})
+    assert cands == []
+
+
+def test_missed_detection_ignores_boxes_the_camera_cannot_see():
+    # A vehicle BEHIND the ego cannot project into a forward camera -> not a miss (projection artifact).
+    ir = _scene_ir([_frame_with_box((-10.0, 0.0, 0.0))])
+    cam = _forward_camera()
+    cands = mine([ir], "missed_detection", params={"camera_calib": cam, "detections": {0: []}})
+    assert cands == []
+
+
+def test_missed_detection_ignores_non_coco_classes():
+    # An 'other' class (e.g. a bollard collapsed to "other") is NOT a COCO-detectable class -> the
+    # detector was never trained to find it, so a miss is not the detector's failure.
+    ir = _scene_ir([_frame_with_box((10.0, 0.0, 0.0), label="other")])
+    cam = _forward_camera()
+    cands = mine([ir], "missed_detection", params={"camera_calib": cam, "detections": {0: []}})
+    assert cands == []
+
+
+def test_missed_detection_class_agnostic_match_suppresses_a_miss():
+    # With class_agnostic, a detection of the WRONG class on the box still counts as "the detector saw
+    # something there" -> not a miss. (Default class-aware would still flag a wrong-class detection.)
+    ir = _scene_ir([_frame_with_box((10.0, 0.0, 0.0))])
+    cam = _forward_camera()
+    vis, box2d, _ = project_ego_boxes(ir.scene.objects_at(0), cam)[0]
+    wrong = _FakeDetection(box2d, "pedestrian", 0.9)
+    # class-aware: pedestrian detection does NOT explain a vehicle GT -> still a miss
+    aware = mine([ir], "missed_detection", params={"camera_calib": cam, "detections": {0: [wrong]}})
+    assert len(aware) == 1
+    # class-agnostic: any detection on the box explains it -> not a miss
+    agn = mine([ir], "missed_detection",
+               params={"camera_calib": cam, "detections": {0: [wrong]}, "class_agnostic": True})
+    assert agn == []
+
+
+def test_missed_detection_clusters_group_by_category():
+    # Two missed vehicles in one range bin and a missed pedestrian -> clustering splits by category
+    # (category_code is part of the cluster key).
+    boxes = (
+        TrackedBox(center=(10.0, 0.0, 0.0), size=(2.0, 2.0, 1.6), yaw=0.0, label="vehicle"),
+        TrackedBox(center=(11.0, 2.0, 0.0), size=(2.0, 2.0, 1.6), yaw=0.0, label="vehicle"),
+        TrackedBox(center=(10.0, -2.0, 0.0), size=(0.8, 0.8, 1.7), yaw=0.0, label="pedestrian"),
+    )
+    fr = Frame(grid=_grid(_empty_occ()), ego=_ego(), time=0.0, objects=boxes)
+    ir = _scene_ir([fr])
+    cam = _forward_camera()
+    cands = mine([ir], "missed_detection", params={"camera_calib": cam, "detections": {0: []}})
+    assert len(cands) == 3  # all three visible, in-range, unmatched
+    clusters = cluster(cands, range_bin_m=8.0)
+    # vehicles (2) cluster together; the pedestrian (1) is its own cluster -> 2 clusters
+    assert len(clusters) == 2
+    sizes = sorted(len(cl.candidates) for cl in clusters)
+    assert sizes == [1, 2]
+
+
+def test_missed_detection_query_routes_and_is_silent_without_a_camera():
+    from prism.failure import signature_for_query
+
+    assert signature_for_query("vehicle missed by the detector").name == "missed_detection"
+    assert signature_for_query("pedestrian missed by the model").name == "missed_detection"
+    # no camera calibration available (synthetic log, no params) -> the signature is honestly silent
+    ir = _scene_ir([_frame_with_box((10.0, 0.0, 0.0))])
+    cands = mine([ir], "missed_detection", params={})
+    assert cands == []
+
+
+@pytest.mark.skipif(
+    not (_AV2_ROOT / "6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c").is_dir()
+    or not pathlib.Path("data/models/yolov8n.onnx").exists(),
+    reason="no camera AV2 log or detector model on disk",
+)
+def test_missed_detection_find_runs_on_real_av2_log():
+    from prism.adapt import ingest
+
+    log = _AV2_ROOT / "6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c"
+    out = find("pedestrian missed by the model", [ingest(log)],
+               params={"limit_frames": 5})
+    assert out["signature"] == "missed_detection"
+    assert out["n_frames_scanned"] == 5
+    assert "model-eval" in out["honesty"].lower()
+    assert "human_summary" in out and isinstance(out["human_summary"], str)

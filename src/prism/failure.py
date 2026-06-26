@@ -61,6 +61,10 @@ __all__ = [
     "cluster",
     "similar_frames",
     "find",
+    "AV2CameraCalib",
+    "load_av2_camera",
+    "project_ego_boxes",
+    "match_detections",
 ]
 
 
@@ -161,7 +165,11 @@ _QUERY_KEYWORDS: dict[str, tuple[str, ...]] = {
         "obstacle", "nothing", "without",
     ),
     "box_in_free": (
-        "missed", "miss", "recall", "box", "free", "occupancy", "object", "lidar", "seen", "lost",
+        "recall", "box", "free", "occupancy", "lidar", "lost",
+    ),
+    "missed_detection": (
+        "missed", "miss", "detector", "detection", "model", "detect", "see", "seen", "saw",
+        "recall", "vehicle", "pedestrian", "car", "person", "object",
     ),
 }
 
@@ -347,7 +355,256 @@ def _log_id(ir: SceneIR) -> str:
     return ir.name
 
 
-# Register the two built-in signatures (declarative; the miner never names them directly).
+# === missed_detection: 2D-detector recall vs AV2 GT boxes (REAL model-eval) ======================
+# The first prediction-backed signature. A GT 3D box is projected into the camera image; if it is
+# visible (in front + in FOV) AND the detector output NO matching detection, the detector failed to
+# see a labeled object = a missed detection (Ramanagopal-style). This is detector-eval recall, NOT an
+# occupancy claim and NOT in-domain (the detector is COCO-pretrained YOLOv8n, not trained on AV2).
+#
+# Calibration + projection reuse the MATH proven in experiments/occquery_v0 (projection.quat_to_rotmat
+# self-check + oracle_stereo_recall.project_ego_to_left with the AV2 Su 3-coeff radial model). The
+# code is copied here (not imported) so src/prism stays independent of experiments/. AV2 boxes are
+# already ego-frame, so projection is ego->camera (sensor extrinsic) -> distort -> pixel; no ego pose.
+
+
+@dataclass(frozen=True)
+class AV2CameraCalib:
+    """One AV2 camera's calibration (intrinsics + Su radial distortion + sensor->ego extrinsic).
+
+    Camera frame is x-right, y-down, z-forward (optical axis): a point is visible iff z>0; pixel =
+    distort(x/z, y/z) then *f + c. `R_cam2ego` maps camera axes -> ego axes; `t_cam_in_ego` is the
+    camera origin in ego. p_cam = R_cam2ego.T @ (p_ego - t_cam_in_ego) -- the exact inverse used in
+    the experiments' projection self-check."""
+
+    name: str
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    k1: float
+    k2: float
+    k3: float
+    width: int
+    height: int
+    R_cam2ego: np.ndarray
+    t_cam_in_ego: np.ndarray
+
+
+def _quat_to_rotmat(q) -> np.ndarray:
+    """(w,x,y,z) unit quaternion -> 3x3 rotation matrix (full 3D; cameras pitch/roll)."""
+    w, x, y, z = np.asarray(q, dtype=float)
+    n = np.linalg.norm([w, x, y, z])
+    if n == 0.0:
+        raise ValueError("zero-norm quaternion")
+    w, x, y, z = np.array([w, x, y, z]) / n
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def load_av2_camera(log_root, camera: str = "ring_front_center") -> Optional[AV2CameraCalib]:
+    """Read one AV2 camera's calibration from a log's calibration/ feathers. Returns None if the log
+    has no calibration dir (so a non-camera log degrades to 'no missed-detection signal', honestly)."""
+    import pathlib
+
+    root = pathlib.Path(log_root) / "calibration"
+    intr_p, ext_p = root / "intrinsics.feather", root / "egovehicle_SE3_sensor.feather"
+    if not intr_p.exists() or not ext_p.exists():
+        return None
+    import pyarrow as pa
+
+    def _read(p):
+        return pa.ipc.open_file(pa.memory_map(str(p), "r")).read_all().to_pydict()
+
+    intr, ext = _read(intr_p), _read(ext_p)
+    if camera not in intr["sensor_name"] or camera not in ext["sensor_name"]:
+        return None
+    ii = intr["sensor_name"].index(camera)
+    ei = ext["sensor_name"].index(camera)
+    q = (ext["qw"][ei], ext["qx"][ei], ext["qy"][ei], ext["qz"][ei])
+    return AV2CameraCalib(
+        name=camera,
+        fx=float(intr["fx_px"][ii]), fy=float(intr["fy_px"][ii]),
+        cx=float(intr["cx_px"][ii]), cy=float(intr["cy_px"][ii]),
+        k1=float(intr["k1"][ii]), k2=float(intr["k2"][ii]), k3=float(intr["k3"][ii]),
+        width=int(intr["width_px"][ii]), height=int(intr["height_px"][ii]),
+        R_cam2ego=_quat_to_rotmat(q),
+        t_cam_in_ego=np.array([ext["tx_m"][ei], ext["ty_m"][ei], ext["tz_m"][ei]], dtype=float),
+    )
+
+
+def _project_ego_points(points_ego: np.ndarray, cam: AV2CameraCalib):
+    """Ego points (N,3) -> (uv pixels, depth, visible). Su 3-coeff radial distortion forward model.
+    visible iff in front (depth>0) AND inside the raw image. Mirrors oracle_stereo_recall.project_ego_to_left."""
+    p = np.atleast_2d(np.asarray(points_ego, dtype=float))
+    p_cam = (cam.R_cam2ego.T @ (p - cam.t_cam_in_ego).T).T
+    depth = p_cam[:, 2]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xn = p_cam[:, 0] / p_cam[:, 2]
+        yn = p_cam[:, 1] / p_cam[:, 2]
+        r2 = xn * xn + yn * yn
+        s = 1.0 + cam.k1 * r2 + cam.k2 * r2 * r2 + cam.k3 * r2 * r2 * r2
+        u = xn * s * cam.fx + cam.cx
+        v = yn * s * cam.fy + cam.cy
+    front = depth > 1e-6
+    inframe = front & (u >= 0) & (u < cam.width) & (v >= 0) & (v < cam.height)
+    uv = np.stack([u, v], axis=-1)
+    uv = np.where(front[:, None], uv, np.nan)
+    return uv, depth, inframe
+
+
+def _box_corners_ego(box) -> np.ndarray:
+    """The 8 ego-frame corners of a TrackedBox (BEV-yawed cuboid). (8,3)."""
+    cx, cy, cz = box.center
+    length, width, height = box.size
+    hl, hw, hh = length / 2.0, width / 2.0, height / 2.0
+    cosy, siny = math.cos(box.yaw), math.sin(box.yaw)
+    corners = []
+    for sx in (-hl, hl):
+        for sy in (-hw, hw):
+            for sz in (-hh, hh):
+                wx = cx + sx * cosy - sy * siny
+                wy = cy + sx * siny + sy * cosy
+                corners.append((wx, wy, cz + sz))
+    return np.asarray(corners, dtype=float)
+
+
+def project_ego_boxes(boxes, cam: AV2CameraCalib, *, min_corners: int = 4):
+    """Project each ego-frame box's 8 corners; return per-box (visible, box2d_xyxy, depth).
+
+    A box is `visible` iff >= `min_corners` of its 8 corners are in front AND in frame (so a box must
+    be substantially inside the image, not clipped by a single grazing corner). box2d_xyxy is the
+    axis-aligned hull of the in-front projected corners (clipped to the image); depth is the box
+    center's camera-frame depth. Returns a list aligned to `boxes`."""
+    out = []
+    for box in boxes:
+        corners = _box_corners_ego(box)
+        uv, depth, vis = _project_ego_points(corners, cam)
+        n_vis = int(vis.sum())
+        cuv, cdepth, _ = _project_ego_points(np.asarray([box.center], dtype=float), cam)
+        center_depth = float(cdepth[0])
+        if n_vis < min_corners:
+            out.append((False, None, center_depth))
+            continue
+        front = depth > 1e-6
+        fu = uv[front]
+        x0 = float(np.clip(fu[:, 0].min(), 0, cam.width))
+        y0 = float(np.clip(fu[:, 1].min(), 0, cam.height))
+        x1 = float(np.clip(fu[:, 0].max(), 0, cam.width))
+        y1 = float(np.clip(fu[:, 1].max(), 0, cam.height))
+        out.append((True, (x0, y0, x1, y1), center_depth))
+    return out
+
+
+def _iou_xyxy(a, b) -> float:
+    ax0, ay0, ax1, ay1 = a
+    bx0, by0, bx1, by1 = b
+    ix0, iy0 = max(ax0, bx0), max(ay0, by0)
+    ix1, iy1 = min(ax1, bx1), min(ay1, by1)
+    iw, ih = max(0.0, ix1 - ix0), max(0.0, iy1 - iy0)
+    inter = iw * ih
+    if inter <= 0.0:
+        return 0.0
+    area_a = max(0.0, ax1 - ax0) * max(0.0, ay1 - ay0)
+    area_b = max(0.0, bx1 - bx0) * max(0.0, by1 - by0)
+    return inter / (area_a + area_b - inter + 1e-9)
+
+
+def _center_in_box(center, box2d) -> bool:
+    u, v = center
+    x0, y0, x1, y1 = box2d
+    return bool(x0 <= u <= x1 and y0 <= v <= y1)
+
+
+def match_detections(gt_box2d: tuple, gt_label: str, detections, *, iou_thr: float = 0.3,
+                     score_thr: float = 0.25, class_agnostic: bool = False) -> bool:
+    """True iff SOME detection matches this GT 2D box: (IoU > iou_thr OR detection center inside the
+    GT box) AND (class-agnostic OR the detection's mapped AV2 label == GT label) AND score >= thr.
+
+    `detections` are `prism.detect.Detection` (duck-typed: needs .box_xyxy, .center, .av2_label,
+    .score). Center-in-box is included alongside IoU because a 2D detector box and a 3D-box hull
+    rarely overlap tightly, so center-containment catches a correct detection IoU alone would miss."""
+    for d in detections:
+        if d.score < score_thr:
+            continue
+        if not class_agnostic and d.av2_label != gt_label:
+            continue
+        if _iou_xyxy(gt_box2d, d.box_xyxy) > iou_thr or _center_in_box(d.center, gt_box2d):
+            return True
+    return False
+
+
+def _eval_missed_detection(ir: SceneIR, t: int, honesty: str, params: dict) -> list[FailureCandidate]:
+    """A GT box visible in the camera with NO matching detection above threshold = a missed detection.
+
+    Detections are supplied per-frame via `params['detections']` keyed by frame_index:
+    {frame_index: [Detection, ...]}. `mine` auto-fills this for a real AV2 log by running the detector
+    on the nearest camera image per LiDAR frame (lazy, optional [detect] extra); a synthetic test
+    passes it directly. The camera calibration rides in `params['camera_calib']` (an AV2CameraCalib);
+    `mine` builds it from the log. If no calibration is available the signature is SILENT (no camera
+    -> no detector-eval signal -- honest, never a faked miss).
+
+    `min_range_m` / `max_range_m` gate by box depth (a box at 0.5 m or 120 m is not a fair recall
+    target). Only GT boxes whose coarse label has a COCO counterpart are considered (a 'BOLLARD' the
+    detector was never trained to find is not a model failure)."""
+    cam = params.get("camera_calib")
+    if cam is None:
+        return []
+    sc = ir.scene
+    dets_by_frame = params.get("detections") or {}
+    detections = dets_by_frame.get(t, [])
+    iou_thr = float(params.get("iou_thr", 0.3))
+    score_thr = float(params.get("score_thr", 0.25))
+    class_agnostic = bool(params.get("class_agnostic", False))
+    min_range = float(params.get("min_range_m", 2.0))
+    max_range = float(params.get("max_range_m", 80.0))
+    min_corners = int(params.get("min_corners", 4))
+    target_labels = params.get("target_labels", _DETECTABLE_LABELS)
+    occluded_lookup = params.get("occluded")  # optional {(frame, slot): bool} (compose w/ occluded predicate)
+
+    boxes = sc.objects_at(t)
+    projected = project_ego_boxes(boxes, cam, min_corners=min_corners)
+    out: list[FailureCandidate] = []
+    for slot, (box, (visible, box2d, depth)) in enumerate(zip(boxes, projected)):
+        if box.label not in target_labels:
+            continue  # the detector was never trained to find this class -> not its failure
+        if not visible or box2d is None:
+            continue  # the camera could not see it -> a miss here would be a projection artifact
+        if not (min_range <= depth <= max_range):
+            continue
+        if match_detections(box2d, box.label, detections, iou_thr=iou_thr, score_thr=score_thr,
+                            class_agnostic=class_agnostic):
+            continue  # the detector saw it -> NOT a miss
+        is_occ = None if occluded_lookup is None else bool(occluded_lookup.get((t, slot), False))
+        feats = {
+            "signature_code": SIGNATURES["missed_detection"].code,
+            "forward_range_m": float(depth),
+            "clearance_m": float(depth),
+            "category_code": _category_code(box.label),
+            "frame_index": float(t),
+        }
+        occ_tag = "" if is_occ is None else (" [occluded]" if is_occ else " [visible/unoccluded]")
+        note = (
+            f"{box.label} GT box at {depth:.1f} m projects into the camera (2D box "
+            f"[{box2d[0]:.0f},{box2d[1]:.0f},{box2d[2]:.0f},{box2d[3]:.0f}]) but the detector output "
+            f"no matching detection (>= {score_thr:.2f}){occ_tag} -> MISSED DETECTION (detector recall failure)"
+        )
+        out.append(FailureCandidate(
+            log_id=_log_id(ir), frame_index=t, signature="missed_detection",
+            honesty=honesty, note=note, features=feats, entity_slot=slot,
+        ))
+    return out
+
+
+# AV2 coarse labels the COCO YOLOv8n CAN in principle detect (have a COCO counterpart). A class the
+# detector was never trained on (BOLLARD, SIGN, CONSTRUCTION_CONE -> 'other') is excluded so a miss is
+# a real recall failure, not a missing-class artifact.
+_DETECTABLE_LABELS = frozenset({"pedestrian", "bicycle", "vehicle", "motorcycle"})
+
+
+# Register the built-in signatures (declarative; the miner never names them directly).
 register_signature(Signature(
     name="path_blocked_no_box",
     aliases=("path-blocked", "blocked-no-box", "unboxed-obstacle", "fp-candidate", "path blocked no object"),
@@ -368,6 +625,22 @@ register_signature(Signature(
     code=2.0,
     evaluate=lambda ir, t, h, p: _eval_box_in_free(ir, t, h, p),
     description="A LiDAR-seen (>=N interior pts) box whose above-road footprint occupancy marks FREE.",
+))
+register_signature(Signature(
+    name="missed_detection",
+    aliases=(
+        "missed-detection", "missed by the model", "missed by the detector", "detector miss",
+        "model miss", "detection recall", "missed object", "detector recall",
+    ),
+    honesty="model-eval: COCO-YOLOv8n detector recall vs AV2 GT boxes; a miss = the detector failed "
+            "to see a labeled object (Ramanagopal-style missed-detection); NOT an occupancy claim. "
+            "Caveats: the detector is COCO-pretrained (NOT trained on AV2) so this is "
+            "cross-distribution recall, not an in-domain benchmark; the COCO->AV2 class map is coarse "
+            "(car/bus/truck -> vehicle); only camera-visible, in-range, COCO-detectable GT classes "
+            "are scored; the ego-hood detector FP is filtered.",
+    code=3.0,
+    evaluate=lambda ir, t, h, p: _eval_missed_detection(ir, t, h, p),
+    description="A camera-visible GT box the 2D detector failed to output a matching detection for.",
 ))
 
 
@@ -391,10 +664,83 @@ def mine(logs, signature, *, params: Optional[dict] = None) -> list[FailureCandi
             lookup = _av2_interior_pts(ir)
             if lookup is not None:
                 frame_params["interior_pts"] = lookup
+        if sig.name == "missed_detection":
+            _fill_missed_detection_inputs(ir, frame_params, limit)
         n = len(ir.scene.frames)
         rng = range(n) if limit is None else range(min(n, int(limit)))
         for t in rng:
             out.extend(sig.evaluate(ir, t, sig.honesty, frame_params))
+    return out
+
+
+def _av2_log_root(ir: SceneIR):
+    """The on-disk AV2 log dir for a SceneIR, or None if not an AV2 log on disk. Mirrors the path
+    reconstruction in `_av2_interior_pts` (the IR does not carry the data root, so reconstruct it from
+    the standard danger-corpus layout)."""
+    import pathlib
+
+    prov = ir.provenance
+    if prov is None or prov.dataset != "av2_sensor":
+        return None
+    candidates = [
+        pathlib.Path("data/danger/av2_sensor") / prov.log_id,
+        pathlib.Path(prov.log_id),
+    ]
+    return next((c for c in candidates if (c / "calibration").is_dir()), None)
+
+
+def _fill_missed_detection_inputs(ir: SceneIR, frame_params: dict, limit) -> None:
+    """For a real AV2 log, auto-fill the missed_detection inputs IN PLACE: the camera calibration and
+    per-LiDAR-frame detections (run the detector on the nearest camera image per frame). Caller-
+    supplied `camera_calib`/`detections` win (so tests inject synthetic ones). Lazy-imports detect so
+    `import prism` / `mine` of the other signatures never touch onnxruntime."""
+    if "camera_calib" in frame_params and "detections" in frame_params:
+        return
+    root = _av2_log_root(ir)
+    if root is None:
+        return
+    camera = str(frame_params.get("camera", "ring_front_center"))
+    if "camera_calib" not in frame_params:
+        cam = load_av2_camera(root, camera)
+        if cam is None:
+            return
+        frame_params["camera_calib"] = cam
+    if "detections" not in frame_params:
+        frame_params["detections"] = _detect_per_frame(ir, root, camera, frame_params, limit)
+
+
+def _detect_per_frame(ir: SceneIR, root, camera: str, frame_params: dict, limit) -> dict:
+    """Run the detector on the nearest camera image to each LiDAR frame -> {frame_index: [Detection]}.
+
+    Matches each LiDAR sweep timestamp to the nearest camera-image timestamp (cameras and LiDAR are
+    not synchronized 1:1). Deterministic; only the in-range frames (respecting `limit_frames`) are
+    detected, so a capped scan does not pay for every image. Lazy import of `prism.detect`."""
+    import pathlib
+
+    from prism.detect import detect_image  # lazy: optional [detect] extra
+
+    cam_dir = pathlib.Path(root) / "sensors" / "cameras" / camera
+    cam_ts = sorted(int(p.stem) for p in cam_dir.glob("*.jpg"))
+    if not cam_ts:
+        return {}
+    cam_arr = np.asarray(cam_ts, dtype=np.int64)
+    conf_thr = float(frame_params.get("score_thr", 0.25))
+    model_path = str(frame_params.get("model_path", "data/models/yolov8n.onnx"))
+    n = len(ir.scene.frames)
+    rng = range(n) if limit is None else range(min(n, int(limit)))
+    cache: dict[int, list] = {}  # cam_ts -> detections (so re-used nearest image is not re-run)
+    out: dict[int, list] = {}
+    for t in rng:
+        fr = ir.scene.frames[t]
+        lidar_ts = int(round(fr.time * 1e9))
+        ci = int(np.argmin(np.abs(cam_arr - lidar_ts)))
+        nearest = int(cam_arr[ci])
+        if nearest not in cache:
+            cache[nearest] = detect_image(
+                cam_dir / f"{nearest}.jpg", model_path=model_path, conf_thr=conf_thr,
+                camera=camera, timestamp_ns=nearest,
+            )
+        out[t] = cache[nearest]
     return out
 
 

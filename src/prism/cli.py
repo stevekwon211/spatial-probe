@@ -21,13 +21,20 @@ Verbs:
       Ingest -> IR -> render to a Rerun recording (.rrd). Rerun is an OPTIONAL extra; without
       rerun-sdk installed this prints the install hint and exits non-zero (never a faked render).
   prism find "<query>" --data <corpus-or-log> [--scene <name>] [--horizon S] [--box-radius M]
-             [--n-interior-min N] [--limit-frames N] [--render rerun [--out <log.rrd>]] [--json]
-      The S6 wow verb. Map a natural-ish query to a failure SIGNATURE (the H1 occupancy-vs-box set
-      difference -- there are NO model predictions on disk, so these are H1/consistency failures, not
-      model-eval), mine it over the corpus, and print a clean human summary + structured JSON: how
-      many matching frame-intervals, the signature, mean range, top categories, the dominant cluster,
-      and K most-similar frames (FEATURE-distance, not semantic). Honest counts -- zero is a real
-      negative, never inflated. `--data` may be a single AV2 log dir OR the av2_sensor corpus root.
+             [--n-interior-min N] [--camera C] [--score-thr T] [--limit-frames N]
+             [--render rerun [--out <log.rrd>]] [--json]
+      The S6 wow verb. Map a natural-ish query to a failure SIGNATURE, mine it over the corpus, and
+      print a clean human summary + structured JSON: how many matching frame-intervals, the signature,
+      mean range, top categories, the dominant cluster, and K most-similar frames (FEATURE-distance,
+      not semantic). Honest counts -- zero is a real negative, never inflated. Signatures:
+        - path_blocked_no_box / box_in_free: the H1 occupancy-vs-box set difference (prediction-free;
+          consistency / FP-direction, NOT model-eval).
+        - missed_detection ("vehicle missed by the detector"): REAL model-eval -- a COCO-YOLOv8n 2D
+          detector run on the camera image vs the AV2 GT boxes; a GT box visible in-frame with no
+          matching detection = the detector failed (Ramanagopal-style). Cross-distribution recall
+          (COCO model, not trained on AV2), coarse class map -- detector-eval, NOT occupancy-eval.
+          Needs the optional [detect] extra (onnxruntime+pillow) and the gitignored yolov8n.onnx.
+      `--data` may be a single AV2 log dir OR the av2_sensor corpus root.
 """
 from __future__ import annotations
 
@@ -238,6 +245,13 @@ def _cmd_find(args: argparse.Namespace) -> int:
         "horizon": args.horizon,
         "box_radius_m": args.box_radius,
         "n_interior_min": args.n_interior_min,
+        # missed_detection knobs (ignored by the other signatures):
+        "camera": args.camera,
+        "iou_thr": args.iou_thr,
+        "score_thr": args.score_thr,
+        "class_agnostic": args.class_agnostic,
+        "min_range_m": args.min_range,
+        "max_range_m": args.max_range,
     }
     if args.limit_frames is not None:
         params["limit_frames"] = args.limit_frames
@@ -327,6 +341,12 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("--horizon", type=float, default=1.0, help="ego forward look-ahead seconds for the path block")
     f.add_argument("--box-radius", dest="box_radius", type=float, default=5.0, help="a box within this many m EXPLAINS a block")
     f.add_argument("--n-interior-min", dest="n_interior_min", type=int, default=5, help="LiDAR-seen gate for box_in_free")
+    f.add_argument("--camera", default="ring_front_center", help="camera for missed_detection (AV2 ring/stereo name)")
+    f.add_argument("--iou-thr", dest="iou_thr", type=float, default=0.3, help="missed_detection: GT/detection IoU match thresh")
+    f.add_argument("--score-thr", dest="score_thr", type=float, default=0.25, help="missed_detection: detector confidence thresh")
+    f.add_argument("--class-agnostic", dest="class_agnostic", action="store_true", help="missed_detection: match ignoring class")
+    f.add_argument("--min-range", dest="min_range", type=float, default=2.0, help="missed_detection: min GT box depth (m)")
+    f.add_argument("--max-range", dest="max_range", type=float, default=80.0, help="missed_detection: max GT box depth (m)")
     f.add_argument("--limit-frames", dest="limit_frames", type=int, default=None, help="cap frames per log (faster scan)")
     f.add_argument("--render", default=None, choices=["rerun"], help="optional: write a .rrd of the dominant cluster")
     f.add_argument("--out", default=None, help="output .rrd path when --render rerun")
