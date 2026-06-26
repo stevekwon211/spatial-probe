@@ -80,6 +80,7 @@ export default function Landing() {
           </div>
           <nav className="flex items-center gap-1" style={{ fontSize: "var(--fs-mono-md)" }}>
             <Link href="/overview" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>Pipeline</Link>
+            <Link href="/prism" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>PRISM</Link>
             <Link href="/evidence" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>Evidence</Link>
             <Link href="/occquery" className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 text-[13px] font-medium text-black transition-opacity hover:opacity-90">Open Explorer <ArrowRight className="size-3.5" /></Link>
           </nav>
