@@ -6,6 +6,7 @@ import { LocaleToggle } from "@/components/locale-toggle";
 import { Metric } from "@/components/landing/metric";
 import { SectionLabel } from "@/components/landing/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
+import { PrismQueryPanel } from "@/components/prism/query-panel";
 // Demo data is imported at build time (bundled into the RSC) — NOT fs-read at runtime.
 // public/ is CDN-served on Vercel and not guaranteed on the serverless function fs, so a
 // static import is the build-safe load. The frame images stay in public/data/frames/ and
@@ -30,6 +31,7 @@ export async function generateMetadata() {
 // ---------------------------------------------------------------------------
 type Honesty = string;
 type SignatureScope = { logs: string[]; stride: number; note: string };
+type Cluster = { name: string; size: number; range_bin_m: number; category: string };
 type Signature = {
   signature: string;
   description: string;
@@ -41,6 +43,7 @@ type Signature = {
   n_clusters: number;
   mean_forward_range_m: number;
   scope_note: string;
+  top_clusters: Cluster[];
 };
 type FailureCatalogue = {
   data_root: string;
@@ -150,10 +153,15 @@ export default async function PrismPage() {
             {t("prism.hero.lead")}
           </p>
           <div className="mt-8 flex items-center justify-center gap-5">
-            <a href="#frames" className="inline-flex items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">{t("prism.hero.seeFailures")} <ArrowRight className="size-4" /></a>
+            <a href="#query" className="inline-flex items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">{t("prism.hero.seeFailures")} <ArrowRight className="size-4" /></a>
             <Link href="/evidence" className="ink-link inline-flex items-center gap-1 text-sm" style={{ color: "var(--muted)" }}>{t("prism.hero.seeEvidence")} <ArrowRight className="size-3.5" /></Link>
           </div>
         </div>
+      </section>
+
+      {/* 1.5 — the new HERO interaction: run a query, see the failures (client island) */}
+      <section id="query" className={WRAP} style={{ ...SECTION, maxWidth: "var(--col-wide)" }}>
+        <PrismQueryPanel signatures={sig} frames={manifest.frames} honestCaveat={catalogue.demo_scope.honest_caveat} />
       </section>
 
       {/* 2 — the wow: model-eval failure frames */}

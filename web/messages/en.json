@@ -155,6 +155,38 @@
       "seeFailures": "See the failures",
       "seeEvidence": "See the evidence"
     },
+    "query": {
+      "label": "run a query · interactive",
+      "heading": "Run a query, see what breaks the model",
+      "demoBadge": "demo: precomputed over a bounded AV2 subset",
+      "inputPlaceholder": "describe a failure mode…",
+      "inputAria": "Describe a failure mode to search for",
+      "findButton": "find",
+      "presetsLabel": "or pick a query",
+      "presets": {
+        "missed_detection": "a pedestrian the model missed",
+        "path_blocked_no_box": "the path is blocked but no tracked box explains it",
+        "box_in_free": "a box the occupancy marked free"
+      },
+      "matchedNote": "(matched from your text)",
+      "kind": {
+        "missed_detection": "model-eval",
+        "path_blocked_no_box": "external-fp",
+        "box_in_free": "consistency-only"
+      },
+      "independentCheck": "independent check",
+      "consistencyOnly": "consistency only",
+      "metricCandidates": "candidates",
+      "metricClusters": "clusters",
+      "metricLogs": "logs",
+      "topClusters": "top clusters by size",
+      "matchingFrames": "matching frames ({n})",
+      "noFrames": "No annotated frame in this demo subset — the clusters and the honesty check are still real; only the burned-in render is absent for this signature.",
+      "honestyTag": "honesty tag (verbatim)",
+      "scopePrefix": "Scope:",
+      "scopeSep": "·",
+      "closeAria": "Close frame"
+    },
     "frames": {
       "label": "the wow · model-eval",
       "heading": "Frames that break a detector",
