@@ -47,19 +47,25 @@ PRISM's differentiator is that a failure verdict comes with an **independent, la
 So `prism find` tags every result by which oracle backs it: `path_blocked_no_box` is **external-fp**
 (traversal-RELIABLE ⇒ a block with no box is most likely a real unboxed obstacle a box-only language is
 structurally blind to — the H1 expressivity win); `box_in_free` is **consistency-only** (and its absolute
-count is inflated by the `_ROAD_Z` ground filter — only the relative gap survives). "Similar scenes" is
-feature-distance, not semantic. No model predictions exist on disk, so model-eval failures (missed-by-model,
-TTC danger) are out of scope by construction; `ttc` ships as a primitive flagged with the dynfield
-pre-registered NEGATIVE.
+count is inflated by the `_ROAD_Z` ground filter — only the relative gap survives); `missed_detection` is
+**model-eval** (a CPU COCO-YOLOv8n detector's recall vs AV2 GT — `prism find "pedestrian missed by the
+model"` returns the scenes the detector failed on, the real "find what breaks your model" wow; honestly
+cross-distribution, not an in-domain number). "Similar scenes" is feature-distance, not semantic. `ttc`
+ships as a primitive flagged with the dynfield pre-registered NEGATIVE.
 
 ## What is real today vs deferred (no inflation)
-- **Real:** the installable engine (Scene IR + SceneQL + predicates + adapters + lossless export, 189 tests
+- **Real:** the installable engine (Scene IR + SceneQL + predicates + adapters + lossless export, 202 tests
   green); the FP-side external oracle (RELIABLE); `prism find` over real AV2 returning the H1 unboxed-
-  obstacle win + the consistency recall signal, each honesty-tagged; a real Rerun `.rrd` render.
-- **Deferred (needs a resource the solo/CPU build lacks):** externally-independent recall (needs a trained
-  AV-domain metric-depth model or a free-driving substrate where stereo is dense); cross-sensor auto-
-  structuring + the data-flywheel Hub (need GPU + users); model-eval failure search (needs detections on
-  disk). These are the funded-Visionary territory, named not faked.
+  obstacle win + the consistency recall signal + **model-eval missed-detections (CPU YOLOv8n detector
+  recall vs GT)**, each honesty-tagged; a real Rerun `.rrd` render.
+- **External recall — triangulated CLOSED for solo/CPU (3 pre-registered attempts, 3 honest negatives):**
+  classical stereo on the following substrate (AUC 0.259, textureless dark backs); frozen DAv2 mono-depth
+  (INVALID-SCALE >9 m, VKITTI not metrically self-consistent on AV2, even ground-plane-rescaled); classical
+  stereo on free-driving (INDETERMINATE-VACUOUS — the clean path has no in-path obstacles to grade). The
+  fix needs a resource the solo/CPU build lacks: a trained AV-domain metric-depth model (GPU) or a curated
+  textured-AND-obstacle-dense substrate. Recall therefore ships consistency-only externally; named, not faked.
+- **Deferred (needs GPU/users):** cross-sensor auto-structuring + the data-flywheel Hub. Funded-Visionary
+  territory.
 
 The defensible solo wedge: **an open, verifiable, physics-aware spatial-failure-search layer whose answers
 carry a label-free correctness check — half of which (the FP side) is already external and RELIABLE.**
