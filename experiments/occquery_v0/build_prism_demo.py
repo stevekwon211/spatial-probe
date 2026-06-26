@@ -7,16 +7,19 @@ READ-ONLY w.r.t. src/probe + src/prism: this is an experiments/ driver. It calls
 `prism.failure` / `prism.adapt` / `prism.detect` API verbatim (no monkeypatching of the engine).
 
 Honest scope (stated in the catalogue JSON, not just here):
-  - missed_detection: 3 AV2 camera logs, FRAME STRIDE applied (detector is ~3.4 s/img CPU; a full
-    157-frame log is ~9 min, so a stride bounds runtime). Stride is recorded per-signature.
-  - path_blocked_no_box / box_in_free: 8 LiDAR-only AV2 logs, scanned FULL (no stride; ~11 s/log).
-    The 8 include 78683234-... which carries the 1 known unboxed-obstacle at frame 66 (~4.2 m).
+  - missed_detection: a BOUNDED subset of 3 AV2 camera logs, FRAME STRIDE applied (detector-bound),
+    so it is NOT a full-corpus detector sweep. Stride is recorded per-signature.
+  - path_blocked_no_box / box_in_free: the FULL AV2 corpus on disk -- EVERY log with annotations +
+    lidar (derived from disk at runtime), scanned FULL (no stride; detector-free + fast). The corpus
+    includes 78683234-... which carries the known unboxed-obstacle at frame 66 (~4.2 m).
 
-Outputs (all under web/public/data/):
+Outputs (under web/public/data/ AND mirrored to web/app/prism/_data/ for the build-time bundle):
   - failure_catalogue.json        per-signature aggregate (counts, clusters, honesty, scope)
-  - frames/*.png + *.caption.txt  ~4-6 annotated demo frames (missed_detection + a BEV path_blocked)
+  - frames/*.png|jpg + *.caption.txt  annotated demo frames (up to ~12 missed_detection + up to 4 BEV)
   - h3b_expressivity.json         copied verbatim from results/ (the A-side headline)
   - oracle_status.json            the 3 oracle verdicts (the honesty-layer panel)
+  The JSONs are copied into web/app/prism/_data/ (frames_manifest + catalogue + h3b + oracle); the
+  frame images stay under web/public/data/frames/ (CDN static).
 
 Determinism: signatures + clustering are deterministic; the detector (onnxruntime CPU) is
 deterministic for a fixed image. The stride is fixed. No randomness is introduced here.
@@ -50,29 +53,48 @@ from prism.failure import (  # noqa: E402
 DATA_ROOT = REPO / "data" / "danger" / "av2_sensor"
 OUT_DIR = REPO / "web" / "public" / "data"
 FRAMES_DIR = OUT_DIR / "frames"
+PRISM_DATA_DIR = REPO / "web" / "app" / "prism" / "_data"  # the static-imported source the page bundles
 RESULTS = REPO / "experiments" / "occquery_v0" / "results"
 
 # === demo log set (honest, fixed) ================================================================
-# missed_detection NEEDS cameras: the 3 logs that carry sensors/cameras + calibration.
+# missed_detection NEEDS cameras: 3 of the 7 camera+calibration logs (the detector is bounded by
+# stride, so a 3-log subset is the honest scope; the corpus carries more camera logs).
 CAMERA_LOGS = [
     "6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c",
     "201fe83b-7dd7-38f4-9d26-7b4a668638a9",
     "2c652f9e-8db8-3572-aa49-fae1344a875b",
 ]
-# path_blocked_no_box / box_in_free are LiDAR-only. 8 logs incl. the known-unboxed-obstacle log.
-LIDAR_LOGS = [
-    "78683234-e6f1-3e4e-af52-6f839254e4c0",  # frame 66 ~4.2 m known unboxed obstacle
-    "070bbf42-31d3-3aa9-aca4-c262afc9077d",
-    "0b5142c1-420b-3fea-9e98-b87327ae22c6",
-    "0fb7276f-ecb5-3e5b-87a8-cc74c709c715",
-    "19350c96-623d-4d77-af96-f8c23f00c358",
-    "2ff4f798-78d9-3384-87e9-61928aa4cb6d",
-    "51bbdd4d-3065-34ae-b369-b6e0444f34db",
-    "7039e410-b5ab-35aa-96bc-2c4b89d3c5e3",
-]
-# Detector budget: a full 157-frame log is ~9 min CPU. A stride of 5 -> ~32 frames/log -> ~1.8 min/log.
-MISSED_DETECTION_STRIDE = 5
+# path_blocked_no_box / box_in_free are detector-free + fast (~0.5 s/log mine after ~9 s/log ingest),
+# so they run over the FULL AV2 corpus: EVERY log with annotations + lidar. The list is derived at
+# runtime (see `_full_lidar_corpus`) so it cannot silently drift from disk; the known-unboxed-obstacle
+# log (78683234, frame 66 ~4.2 m) is part of the corpus and is sorted first so it leads the catalogue.
+KNOWN_UNBOXED_LOG = "78683234-e6f1-3e4e-af52-6f839254e4c0"  # frame 66 ~4.2 m known unboxed obstacle
+# Detector budget: YOLOv8n CPU measured ~0.05-0.22 s/img here (onnxruntime, warm). A stride of 3 ->
+# ~52 frames/log -> ~5-10 s/log mine; 3 logs stays well within the ~10-15 min total budget. If the
+# detector were slower (~3 s/img) this stride would be raised; it is recorded per-signature either way.
+MISSED_DETECTION_STRIDE = 3
 MAX_IMG_PX = 1100  # web-friendly downsize cap for the annotated camera frames
+MAX_MISSED_FRAMES = 12  # up to ~10-12 annotated camera frames, spread across the 3 camera logs
+MAX_BEV_FRAMES = 4      # render BEV for up to 4 path_blocked_no_box instances found in the full corpus
+
+
+def _full_lidar_corpus() -> list[str]:
+    """Every AV2 log under DATA_ROOT that has BOTH annotations.feather and a non-empty sensors/lidar/
+    dir -> the full LiDAR corpus for the detector-free signatures. Derived from disk (never a frozen
+    list) so the scope tracks the actual data. The known-unboxed-obstacle log is sorted first."""
+    logs = []
+    for d in sorted(DATA_ROOT.iterdir()):
+        if not d.is_dir():
+            continue
+        if (d / "annotations.feather").exists() and any((d / "sensors" / "lidar").glob("*.feather")):
+            logs.append(d.name)
+    # lead with the known-unboxed-obstacle log so it heads the catalogue/log_ids list
+    if KNOWN_UNBOXED_LOG in logs:
+        logs = [KNOWN_UNBOXED_LOG] + [lg for lg in logs if lg != KNOWN_UNBOXED_LOG]
+    return logs
+
+
+LIDAR_LOGS = _full_lidar_corpus()
 
 
 def _stride_scene_ir(ir, stride: int):
@@ -95,8 +117,9 @@ def _category_label(code: float) -> str:
     return inv.get(round(code, 1), "other")
 
 
-def _aggregate_signature(name: str, logs_ir, *, stride: int, params: dict, scope_note: str) -> dict:
+def _aggregate_signature(name: str, logs_ir, *, stride: int, params: dict, scope_note: str):
     """Mine one signature over the given SceneIRs, cluster the hits, and build the catalogue entry.
+    Returns (catalogue_entry, candidates) so the caller can render frames from the raw hits.
 
     Records the VERBATIM honesty tag from the Signature, the per-signature scope (logs, stride,
     frames scanned), candidate count, cluster count, and the top clusters (range bin, size, category)."""
@@ -121,7 +144,7 @@ def _aggregate_signature(name: str, logs_ir, *, stride: int, params: dict, scope
 
     ranges = [c.features.get("forward_range_m", 0.0) for c in candidates]
     ranges = [r for r in ranges if np.isfinite(r)]
-    return {
+    entry = {
         "signature": sig.name,
         "description": sig.description,
         "honesty": sig.honesty,  # VERBATIM from failure.py
@@ -136,6 +159,7 @@ def _aggregate_signature(name: str, logs_ir, *, stride: int, params: dict, scope
         "scope_note": scope_note,
         "mine_seconds": round(elapsed, 1),
     }
+    return entry, candidates
 
 
 # === annotated demo frames =======================================================================
@@ -152,18 +176,22 @@ def _font(size: int):
     return ImageFont.load_default()
 
 
-def _missed_detection_frames(max_frames: int = 3) -> list[dict]:
+def _missed_detection_frames(max_frames: int = MAX_MISSED_FRAMES, per_log_max: int = 5) -> list[dict]:
     """Render annotated missed_detection frames: camera image + green detector boxes + red MISSED
-    GT boxes. Picks frames with BOTH >=1 detection AND >=1 clear miss (the visceral contrast).
+    GT boxes. Picks frames with BOTH >=1 detection AND >=1 clear miss (the visceral contrast), spread
+    across the 3 camera logs (up to `per_log_max` each, `max_frames` total). Within a log the picked
+    frames are the strongest-contrast ones (most misses), spaced apart so they are not near-duplicates.
 
-    Reuses the proven logic from /tmp/prism_demo.py (load_av2_camera, detect_image, project_ego_boxes,
-    match_detections class_agnostic, PIL draw) -- run through the same public API the engine uses."""
+    Reuses the proven logic (load_av2_camera, detect_image, project_ego_boxes, match_detections
+    class_agnostic, PIL draw) -- run through the same public API the engine uses."""
     from prism.detect import detect_image
 
     from probe.adapters import av2_sensor
 
-    written = []
+    written: list[dict] = []
     target_labels = frozenset({"pedestrian", "bicycle", "vehicle", "motorcycle"})
+    # distribute the per-log budget evenly so all 3 logs are represented even if one is miss-rich
+    per_log_budget = max(1, min(per_log_max, -(-max_frames // max(1, len(CAMERA_LOGS)))))
     for log in CAMERA_LOGS:
         if len(written) >= max_frames:
             break
@@ -179,9 +207,10 @@ def _missed_detection_frames(max_frames: int = 3) -> list[dict]:
         sweeps = sorted(int(p.stem) for p in (root / "sensors" / "lidar").glob("*.feather"))
         scene = av2_sensor.load_scene(log, str(DATA_ROOT), with_boxes=True, timestamps=sweeps)
 
-        best = None  # (n_missed, frame_idx, cam_ts, jpg, missed, dets)
-        # scan a strided set of frames so we don't run the detector on all 157
-        for i in range(0, len(scene.frames), 4):
+        # collect ALL frames with both detections AND >=1 clear miss (strided so we don't run the
+        # detector on every image), then pick the strongest, well-spaced subset for this log.
+        candidates = []  # (n_missed, frame_idx, cam_ts, jpg, missed, dets)
+        for i in range(0, len(scene.frames), MISSED_DETECTION_STRIDE):
             boxes = list(scene.frames[i].objects)
             if not boxes:
                 continue
@@ -204,17 +233,24 @@ def _missed_detection_frames(max_frames: int = 3) -> list[dict]:
                     continue
                 if not match_detections(b2d, lab, dets, class_agnostic=True):
                     missed.append((b2d, lab, depth))
-            if missed and (best is None or len(missed) > best[0]):
-                best = (len(missed), i, cts, jpg, missed, dets)
-            if best and best[0] >= 2:
+            if missed:
+                candidates.append((len(missed), i, cts, jpg, missed, dets))
+
+        # rank by miss-count (visceral contrast), then greedily keep ones >= MIN_FRAME_GAP apart so
+        # the rendered set spans the log rather than clustering on one stretch.
+        MIN_FRAME_GAP = 12
+        candidates.sort(key=lambda c: (-c[0], c[1]))
+        picked: list[tuple] = []
+        for c in candidates:
+            if len(picked) >= per_log_budget or len(written) + len(picked) >= max_frames:
                 break
-        if best is None:
-            continue
-        nmiss, i, cts, jpg, missed, dets = best
-        out_png, caption = _draw_missed(log, i, cts, jpg, missed, dets)
-        written.append({"signature": "missed_detection", "log": log, "frame_index": i,
-                        "cam_timestamp_ns": cts, "n_detected": len(dets), "n_missed": nmiss,
-                        "png": out_png, "caption": caption})
+            if all(abs(c[1] - p[1]) >= MIN_FRAME_GAP for p in picked):
+                picked.append(c)
+        for nmiss, i, cts, jpg, missed, dets in sorted(picked, key=lambda c: c[1]):
+            out_png, caption = _draw_missed(log, i, cts, jpg, missed, dets)
+            written.append({"signature": "missed_detection", "log": log, "frame_index": i,
+                            "cam_timestamp_ns": cts, "n_detected": len(dets), "n_missed": nmiss,
+                            "png": out_png, "caption": caption})
     return written
 
 
@@ -280,8 +316,23 @@ def _draw_missed(log, frame_idx, cts, jpg, missed, dets) -> tuple[str, str]:
     return str(out_png.relative_to(OUT_DIR)), caption
 
 
-def _path_blocked_bev_frame() -> dict | None:
-    """Render a top-down BEV PNG of the path_blocked_no_box hit at frame 66 of 78683234 (no camera):
+def _path_blocked_bev_frames(instances: list[tuple[str, int]], max_frames: int = MAX_BEV_FRAMES) -> list[dict]:
+    """Render up to `max_frames` BEV PNGs for the given (log, frame_index) path_blocked_no_box hits
+    found in the full-corpus mine. Re-ingests each distinct log ONCE (cached) so a multi-hit log does
+    not pay ingest per frame. Returns a manifest entry per rendered frame (skips any that fail)."""
+    out: list[dict] = []
+    ir_cache: dict[str, object] = {}
+    for log, frame_idx in instances[:max_frames]:
+        if log not in ir_cache:
+            ir_cache[log] = ingest(DATA_ROOT / log)
+        entry = _path_blocked_bev_frame(log, frame_idx, ir_cache[log])
+        if entry is not None:
+            out.append(entry)
+    return out
+
+
+def _path_blocked_bev_frame(log: str, frame_idx: int, ir=None) -> dict | None:
+    """Render a top-down BEV PNG of a path_blocked_no_box hit at (log, frame_idx) (no camera):
     occupancy obstacle voxels (gray), ego in-path band (light), the BLOCKED location (red),
     tracked boxes (blue) -- 'occupancy blocks here, no box explains it'."""
     import matplotlib
@@ -289,9 +340,8 @@ def _path_blocked_bev_frame() -> dict | None:
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
 
-    log = "78683234-e6f1-3e4e-af52-6f839254e4c0"
-    frame_idx = 66
-    ir = ingest(DATA_ROOT / log)
+    if ir is None:
+        ir = ingest(DATA_ROOT / log)
     sc = ir.scene
     t = frame_idx
     grid = sc.grid_at(t)
@@ -426,12 +476,30 @@ def _oracle_status() -> dict:
 # === main ========================================================================================
 
 
+def _path_blocked_instances(candidates) -> list[tuple[str, int]]:
+    """Distinct (log_id, frame_index) pairs of path_blocked_no_box hits, nearest-block first (the
+    most visceral 'something blocks the path right ahead' frames lead). De-duped per (log, frame)."""
+    seen: set[tuple[str, int]] = set()
+    rows: list[tuple[float, str, int]] = []
+    for c in candidates:
+        key = (c.log_id, c.frame_index)
+        if key in seen:
+            continue
+        seen.add(key)
+        rng = c.features.get("forward_range_m", 1e9)
+        rng = rng if np.isfinite(rng) else 1e9
+        rows.append((float(rng), c.log_id, c.frame_index))
+    rows.sort(key=lambda r: (r[0], r[1], r[2]))  # nearest block first, deterministic tie-break
+    return [(lg, fi) for _, lg, fi in rows]
+
+
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     FRAMES_DIR.mkdir(parents=True, exist_ok=True)
 
     print("== ingesting demo logs ==", flush=True)
-    # LiDAR signatures: full-frame scan over the 8 LiDAR logs.
+    # LiDAR signatures: full-frame scan over the FULL corpus (every annotated+lidar log).
+    print(f"  LiDAR corpus: {len(LIDAR_LOGS)} logs (full corpus, stride 1)", flush=True)
     lidar_irs = [ingest(DATA_ROOT / lg) for lg in LIDAR_LOGS]
     print(f"  ingested {len(lidar_irs)} LiDAR logs", flush=True)
 
@@ -443,6 +511,7 @@ def main() -> int:
         cam_irs.append(sir)
     print(f"  ingested {len(cam_irs)} camera logs (stride {MISSED_DETECTION_STRIDE})", flush=True)
 
+    n_lidar = len(LIDAR_LOGS)
     catalogue = {
         "schema": "prism_failure_catalogue/v1",
         "generated_by": "experiments/occquery_v0/build_prism_demo.py",
@@ -451,66 +520,76 @@ def main() -> int:
             "missed_detection": {
                 "logs": CAMERA_LOGS,
                 "stride": MISSED_DETECTION_STRIDE,
-                "note": "3 AV2 camera logs (the only logs with sensors/cameras + calibration); "
-                        "frame stride to bound CPU detector runtime (~3.4 s/img).",
+                "note": f"{len(CAMERA_LOGS)} AV2 camera logs (a bounded subset of the camera+calibration "
+                        f"logs); frame stride {MISSED_DETECTION_STRIDE} to bound CPU detector runtime "
+                        f"(YOLOv8n CPU ~0.05-0.2 s/img here).",
             },
             "path_blocked_no_box": {
                 "logs": LIDAR_LOGS,
                 "stride": 1,
-                "note": "8 LiDAR-only AV2 logs, FULL scan (no stride). Incl. 78683234-... with the "
-                        "1 known unboxed-obstacle at frame 66 (~4.2 m).",
+                "note": f"FULL corpus: all {n_lidar} AV2 logs with annotations + lidar, FULL scan "
+                        f"(no stride). Incl. 78683234-... with the known unboxed-obstacle at frame 66 "
+                        f"(~4.2 m).",
             },
             "box_in_free": {
                 "logs": LIDAR_LOGS,
                 "stride": 1,
-                "note": "same 8 LiDAR-only AV2 logs, FULL scan (no stride).",
+                "note": f"FULL corpus: same {n_lidar} AV2 annotated+lidar logs, FULL scan (no stride).",
             },
-            "honest_caveat": "Demo scope is a BOUNDED SUBSET of the AV2 corpus (8 LiDAR logs + 3 camera "
-                             "logs, missed_detection strided). NOT a full-corpus sweep. Per-signature "
-                             "honesty tags are verbatim from src/prism/failure.py.",
+            "honest_caveat": f"Demo scope: the LiDAR-only signatures (path_blocked_no_box, box_in_free) "
+                             f"run over the FULL AV2 corpus on disk ({n_lidar} annotated+lidar logs, "
+                             f"stride 1); missed_detection runs over a BOUNDED {len(CAMERA_LOGS)}-camera-log "
+                             f"subset, strided (stride {MISSED_DETECTION_STRIDE}) to cap CPU detector "
+                             f"runtime, so it is NOT a full-corpus detector sweep. Per-signature honesty "
+                             f"tags are verbatim from src/prism/failure.py.",
         },
         "signatures": {},
     }
 
     print("== mining missed_detection (this runs the detector; slowest) ==", flush=True)
-    catalogue["signatures"]["missed_detection"] = _aggregate_signature(
+    md_entry, _md_cands = _aggregate_signature(
         "missed_detection", cam_irs,
         stride=MISSED_DETECTION_STRIDE,
         params={"class_agnostic": True, "score_thr": 0.25, "range_bin_m": 8.0},
-        scope_note=f"3 camera logs, stride {MISSED_DETECTION_STRIDE}, class-agnostic match, score>=0.25.",
+        scope_note=f"{len(CAMERA_LOGS)} camera logs, stride {MISSED_DETECTION_STRIDE}, "
+                   f"class-agnostic match, score>=0.25.",
     )
-    print("   ", catalogue["signatures"]["missed_detection"]["n_candidates"], "candidates", flush=True)
+    catalogue["signatures"]["missed_detection"] = md_entry
+    print("   ", md_entry["n_candidates"], "candidates", flush=True)
 
-    print("== mining path_blocked_no_box ==", flush=True)
-    catalogue["signatures"]["path_blocked_no_box"] = _aggregate_signature(
+    print("== mining path_blocked_no_box (full corpus) ==", flush=True)
+    pb_entry, pb_cands = _aggregate_signature(
         "path_blocked_no_box", lidar_irs,
         stride=1,
         params={"horizon": 1.0, "box_radius_m": 5.0, "range_bin_m": 4.0},
-        scope_note="8 LiDAR logs, full scan, horizon 1.0 s, box_radius 5 m.",
+        scope_note=f"{n_lidar} LiDAR logs (full corpus), full scan, horizon 1.0 s, box_radius 5 m.",
     )
-    print("   ", catalogue["signatures"]["path_blocked_no_box"]["n_candidates"], "candidates", flush=True)
+    catalogue["signatures"]["path_blocked_no_box"] = pb_entry
+    print("   ", pb_entry["n_candidates"], "candidates", flush=True)
 
-    print("== mining box_in_free ==", flush=True)
-    catalogue["signatures"]["box_in_free"] = _aggregate_signature(
+    print("== mining box_in_free (full corpus) ==", flush=True)
+    bf_entry, _bf_cands = _aggregate_signature(
         "box_in_free", lidar_irs,
         stride=1,
         params={"n_interior_min": 5, "range_bin_m": 8.0},
-        scope_note="8 LiDAR logs, full scan, LiDAR-seen gate n_interior>=5.",
+        scope_note=f"{n_lidar} LiDAR logs (full corpus), full scan, LiDAR-seen gate n_interior>=5.",
     )
-    print("   ", catalogue["signatures"]["box_in_free"]["n_candidates"], "candidates", flush=True)
+    catalogue["signatures"]["box_in_free"] = bf_entry
+    print("   ", bf_entry["n_candidates"], "candidates", flush=True)
 
     (OUT_DIR / "failure_catalogue.json").write_text(json.dumps(catalogue, indent=2, default=float))
     print("wrote failure_catalogue.json", flush=True)
 
     print("== rendering missed_detection frames ==", flush=True)
-    frames = _missed_detection_frames(max_frames=3)
+    frames = _missed_detection_frames(max_frames=MAX_MISSED_FRAMES)
     print(f"   {len(frames)} missed_detection frames", flush=True)
 
-    print("== rendering path_blocked BEV frame ==", flush=True)
-    bev = _path_blocked_bev_frame()
-    if bev is not None:
-        frames.append(bev)
-        print("   BEV frame written", flush=True)
+    print("== rendering path_blocked BEV frames ==", flush=True)
+    pb_instances = _path_blocked_instances(pb_cands)
+    print(f"   {len(pb_instances)} path_blocked instances found; rendering up to {MAX_BEV_FRAMES}", flush=True)
+    bevs = _path_blocked_bev_frames(pb_instances, max_frames=MAX_BEV_FRAMES)
+    frames.extend(bevs)
+    print(f"   {len(bevs)} BEV frame(s) written", flush=True)
 
     frames_manifest = {
         "schema": "prism_frames_manifest/v1",
@@ -523,6 +602,16 @@ def main() -> int:
     shutil.copyfile(RESULTS / "h3b_expressivity.json", OUT_DIR / "h3b_expressivity.json")
     (OUT_DIR / "oracle_status.json").write_text(json.dumps(_oracle_status(), indent=2, default=float))
     print("wrote h3b_expressivity.json, oracle_status.json", flush=True)
+
+    # === copy the JSONs the page statically imports (app/prism/_data/) ===========================
+    # The page reads failure_catalogue.json + frames_manifest.json from _data/ (build-time bundle),
+    # while the frame PNGs stay CDN-served under public/data/frames/. h3b/oracle JSONs are unchanged
+    # by this regen but are re-copied so _data/ always mirrors the freshly written public/data/.
+    print("== copying JSONs to web/app/prism/_data/ ==", flush=True)
+    PRISM_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    for name in ("failure_catalogue.json", "frames_manifest.json", "h3b_expressivity.json", "oracle_status.json"):
+        shutil.copyfile(OUT_DIR / name, PRISM_DATA_DIR / name)
+        print(f"   copied {name} -> app/prism/_data/", flush=True)
 
     print("\n== DONE ==", flush=True)
     return 0
