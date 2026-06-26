@@ -1,60 +1,128 @@
-# spatial-probe
+# PRISM (spatial-probe)
 
-An instrument for **probing what a spatial representation actually stores** — and whether
-that stored state is queryable and trustworthy enough for a machine to act on.
+**Find the scenes where the model is wrong — with a label-free correctness check.**
 
-> Thesis: 3D's essence is queryable/updatable **state** (geometry, occupancy, dynamics,
-> uncertainty, provenance), not the **render**. Method: run a *falsifiable physical
-> predicate* as a test, paired with a fairness control, and measure whether a
-> representation stores the signal needed to answer it.
+PRISM is an open, local spatial-failure-search engine. Point it at your autonomous-vehicle logs,
+ask "where did the model miss something," and get back the frame-intervals that broke it — each
+answer tagged with *how much you can trust it*. No infra, no server, no account: `pip install`, then
+`prism find` on your own data.
 
-`src/probe/` is the reusable instrument; each research question lives in
-`experiments/<name>/`. See **[PLAN.md](PLAN.md)** for the full plan and the first
-experiment's falsifiable protocol.
+> The engine reads your sensor logs into a sensor-agnostic **Scene IR** (the source of truth), runs
+> falsifiable **physical predicates** over it through a safe query language (**SceneQL**), and mines
+> for failure signatures. Visualization (Rerun) is an *adapter*, never the foundation.
 
-## Status
+This is the **open core**. The thesis behind it — 3D's essence is queryable *state* (geometry,
+occupancy, dynamics), not the render — and the research protocol live in
+**[docs/prism.md](docs/prism.md)** and **[PLAN.md](PLAN.md)**.
 
-First experiment: **`experiments/occquery_v0`** — occupancy-native physical-predicate retrieval
-(clearance / free-path / free-width) that object-box query languages cannot express. The core
-instrument (DDA raycast, occupancy grid, C-space predicates, Occ3D-nuScenes adapter, query DSL,
-retrieval, metrics) is implemented, tested (pure numpy/scipy, no torch), and **runs on real
-Occ3D-nuScenes mini** (10 scenes / 404 frames).
+## Install
 
-**H1 — expressivity (the headline, oracle-free): holds.** Three non-identifiability witnesses
-(`tests/test_expressivity.py`) show two scenes identical in every box+map observable but differing
-in unboxed occupancy — a box-only language must return the same answer, the occupancy predicate
-distinguishes them. RefAV's released 32-function set has 0 free-space primitives; 20 of 24
-pre-registered queries are inexpressible in it. No oracle, reproducible by anyone.
+```sh
+# from a clone (today):
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -e .                  # core: numpy / scipy / pyarrow / pyyaml — no torch, no GPU
+pip install -e ".[all]"           # + optional features: rerun view, mcap, model-eval find
+# future, once published:        pip install prism
+```
 
-**H3 — denotation correctness: DEMOTED to an internal-consistency check.** The only oracle buildable
-on this hardware re-derives over the *same* Occ3D/LiDAR the predicate reads, so it measures
-consistency, not external truth; it was left honestly unbuilt rather than faked. A real P/R/F1
-number is blocked on a val-data download + a positive-containing scene set (the 10 mini scenes have
-0 positives). **H2** (leaderboard) is not started — substrate mismatch (Occ3D-nuScenes vs RefAV's
-Argoverse 2). See **[results/summary.md](experiments/occquery_v0/results/summary.md)** and the sealed
-**[preregistration.md](experiments/occquery_v0/preregistration.md)**; success criteria in
-**[docs/benchmark-anchors.md](docs/benchmark-anchors.md)**. Synthetic runs are smoke tests, never evidence.
+Core is pure CPU Python. The heavy bits (Rerun renderer, ONNX detector) are **optional extras**,
+lazy-imported — `import prism` never pulls in torch / onnxruntime / rerun.
+
+## Quickstart — the 5 commands
+
+```sh
+prism ingest <av2_log_or_occ3d>                                          # adapter -> validated Scene IR
+prism query  "min_free_width_along_path(scene, t, 3.0) < ego_width(scene)" --data <log>   # run a predicate
+prism find   "pedestrian missed by the model" --data <log_or_corpus>     # the wow: search for failures
+prism export out.parquet --data <log> --openlabel out.json               # lossless, no lock-in
+prism view   --backend rerun --data <log>                                # optional: pip install -e ".[rerun]"
+```
+
+Real output from `prism find` on an Argoverse 2 sensor log (8 frames, CPU YOLOv8n detector):
+
+```text
+$ prism find "pedestrian missed by the model" \
+      --data data/danger/av2_sensor/6aaf5b08-9f84-3a2e-8a32-2e50e5e11a3c --limit-frames 8
+
+query: "pedestrian missed by the model"
+  -> signature: missed_detection  (A camera-visible GT box the 2D detector failed to output a matching detection for.)
+  found 34 matching frame-intervals across 1 log(s) (8 frames scanned), in 6 cluster(s)
+  mean forward range to the flagged region: 47.86 m
+  top categories: pedestrian:24, vehicle:10
+  dominant cluster: missed_detection@range_bin~36m_n16 (size 16, ~35.54 m forward)
+  most-similar frames (FEATURE-distance, not semantic): f3(d=0.683), f4(d=0.686), f3(d=0.687), ...
+  honesty: model-eval: COCO-YOLOv8n detector recall vs AV2 GT boxes; a miss = the detector failed to
+  see a labeled object (Ramanagopal-style missed-detection); NOT an occupancy claim. Caveats: the
+  detector is COCO-pretrained (NOT trained on AV2) so this is cross-distribution recall, not an
+  in-domain benchmark ...
+```
+
+(Structured JSON follows the human summary; add `--json` for JSON only, `--render rerun` to write a
+`.rrd` of the dominant cluster.) Counts are honest — zero matches is a real negative, never inflated.
+
+## Architecture (one line)
+
+**Scene IR is the source of truth; SceneQL queries it; Rerun is an adapter.** Five invariants are
+tested: the PRISM API never exposes Rerun types; `.rrd` is cache/export only (`rm *.rrd` →
+byte-identical query); the core works with nothing optional installed; export is lossless
+(content-hash round-trip); the viewer is separated from compute. Full diagram in
+[docs/prism.md](docs/prism.md).
+
+## Honesty — what the correctness check does and does NOT prove
+
+Every `prism find` result is tagged by which oracle backs it. We state this verbatim, no inflation:
+
+- **False-positive side (does the map hallucinate obstacles on the driven path?) — EXTERNAL +
+  RELIABLE.** The traversal oracle uses the ego's *recorded future trajectory* (poses, not LiDAR) ⇒
+  that space was physically free. `true_fp 0.0000` vs `shuffled 0.0357`, held-out free-driving. This
+  is the `path_blocked_no_box` signature: the H1 occupancy-vs-box expressivity win a box-only language
+  is structurally blind to.
+- **Recall side (does the map miss real obstacles?) — consistency-only externally; external recall is
+  honestly CLOSED on this substrate.** Box-recall is same-modality (relative gap supported, absolute is
+  floor-straddle-inflated). External cross-modal recall was attempted three times and killed honestly
+  (classical stereo AUC 0.259; frozen mono-depth INVALID-SCALE >9 m; free-driving INDETERMINATE). It
+  needs a resource the solo/CPU build lacks: a GPU-trained AV-domain metric-depth model. Named, not
+  faked.
+- **`missed_detection` ("missed by the model") — model-eval, cross-distribution.** A CPU COCO-YOLOv8n
+  detector's recall vs AV2 GT boxes. Real "find what breaks your model," but honestly cross-distribution
+  (COCO model, not trained on AV2), coarse class map. Not an in-domain benchmark number.
+
+"Similar scenes" is feature-distance, not semantic. Synthetic runs are smoke tests, never evidence.
+The sealed protocol and result framing are in
+[experiments/occquery_v0/preregistration.md](experiments/occquery_v0/preregistration.md) and
+[docs/prism.md](docs/prism.md).
 
 ## Layout
 
-- `src/probe/` — core instrument (DDA raycast, occupancy grid, predicates, metrics, adapters)
-- `experiments/occquery_v0/` — first falsifiable experiment
-- `docs/` — benchmark anchors & success criteria (`docs/benchmark-anchors.md`)
-- `tests/` — unit tests (TDD; core primitive first)
+- `src/prism/` — the open-core engine (Scene IR, SceneQL, predicates, adapters, failure-mining, CLI)
+- `src/probe/` — the underlying instrument (DDA raycast, occupancy grid, C-space predicates, metrics)
+- `experiments/occquery_v0/` — the first falsifiable experiment (H1 expressivity holds; see prereg)
+- `docs/` — [prism.md](docs/prism.md) (engine + honesty), [benchmark-anchors.md](docs/benchmark-anchors.md) (success/kill criteria)
+- `tests/` — 202 unit/integration tests (pure numpy/scipy, no torch, no data needed)
 - `data/` — datasets (gitignored; never committed)
-- `web/` — visualization / build-in-public site (Next.js + Tailwind, deployed on Vercel); reads experiment results
+- `web/` — build-in-public site (Next.js, deployed on Vercel); reads experiment results
 
-## Setup
+## Dependencies
+
+| Tier | Install | What it adds |
+|---|---|---|
+| **core** | `pip install -e .` | numpy, scipy, pyarrow, pyyaml — the full `prism` engine (CPU, pure Python) |
+| `[rerun]` | `pip install -e ".[rerun]"` | `prism view` Rerun `.rrd` renderer |
+| `[mcap]` | `pip install -e ".[mcap]"` | MCAP log-container adapter |
+| `[detect]` | `pip install -e ".[detect]"` | onnxruntime + pillow — `prism find "... missed by the model"` (YOLOv8n model-eval) |
+| `[all]` | `pip install -e ".[all]"` | rerun + mcap + detect together |
+| `[data]` | `pip install -e ".[data]"` | nuscenes-devkit — Occ3D-nuScenes research substrate (not a tool dependency) |
+| `[dev]` | `pip install -e ".[dev]"` | pytest |
+
+`torch` and the experiment-only frozen-depth oracle are **not** package dependencies — they live in
+`experiments/`, off the install path.
+
+## Develop / test
 
 ```sh
-python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-python -m pytest                              # full suite, ~1.5s, no data needed
-python experiments/occquery_v0/run.py         # synthetic smoke (NOT a result)
+python -m pytest                  # 202 tests, ~CPU-only, no dataset needed
 ```
-
-Datasets: nuScenes-mini + Occ3D-nuScenes labels into `data/` (free; nuScenes research
-account + terms). v0 runs CPU-only on `mini`.
 
 ## License
 
