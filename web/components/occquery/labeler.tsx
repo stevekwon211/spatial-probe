@@ -6,6 +6,7 @@ import { ArrowLeft, Check, X, SkipForward, Undo2, Save, Lock } from "lucide-reac
 import type * as THREE from "three";
 import { Scene3D, type Obstacle, type ReachableField } from "./scene3d";
 import { GlassPanel } from "./glass";
+import { LocaleToggle } from "@/components/locale-toggle";
 import { useViewer } from "./store";
 import { useLabel, type Pool, type Verdict } from "./label-store";
 import { UI, QUERY_KO, GUIDE, LOOK_FOR, type Lang } from "./i18n";
@@ -173,7 +174,10 @@ export function Labeler() {
 
   if (!pool) {
     return (
-      <div className="flex h-screen items-center justify-center bg-neutral-950 text-neutral-400">
+      <div className="relative flex h-screen items-center justify-center bg-neutral-950 text-neutral-400">
+        <div className="absolute left-4 top-4">
+          <LocaleToggle />
+        </div>
         <p className="text-sm">{saveMsg || t.loading}</p>
       </div>
     );
@@ -211,9 +215,14 @@ export function Labeler() {
       <div className="absolute left-4 top-4 w-[22rem]">
         <GlassPanel className="p-4">
           <div className="flex items-center justify-between">
-            <Link href="/occquery" className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-200">
-              <ArrowLeft className="h-3.5 w-3.5" /> occquery
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/occquery" className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-200">
+                <ArrowLeft className="h-3.5 w-3.5" /> occquery
+              </Link>
+              {/* site-wide UI-language toggle (cookie-driven) — distinct from the sealed labeling-task
+                  language toggle on the right, which only switches the query/guidance content. */}
+              <LocaleToggle />
+            </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center rounded-lg border border-white/10 p-0.5">
                 {langBtn("en", "EN")}

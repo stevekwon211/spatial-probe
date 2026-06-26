@@ -1,17 +1,21 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { GlassPanel } from "@/components/occquery/glass";
 import { StatusChip } from "@/components/ui/status-chip";
+import { LocaleToggle } from "@/components/locale-toggle";
 import { Metric } from "@/components/landing/metric";
 import { SectionLabel } from "@/components/landing/section-label";
 import { CapabilityRow } from "@/components/landing/capability-row";
 import { ALL_MODULES, IN_PROGRESS, SHIPPED, THESIS, TOTAL } from "@/lib/pipeline";
 
-export const metadata = {
-  title: "spatial-probe — the spatial data engine for AV and robotics",
-  description:
-    "Query, measure, and trust 3D scene state by what it physically means — free-space, clearance, corridor width, dynamics — with every number you can re-run.",
-};
+export async function generateMetadata() {
+  const t = await getTranslations("home");
+  return {
+    title: t("metaTitle"),
+    description: t("metaDescription"),
+  };
+}
 
 function Logo({ className = "size-6" }: { className?: string }) {
   return (
@@ -69,20 +73,22 @@ function OccupancyDiagram() {
 const WRAP = "mx-auto w-full px-[clamp(20px,5vw,40px)]";
 const SECTION = { marginTop: "clamp(56px, 8vh, 88px)" } as const;
 
-export default function Landing() {
+export default async function Landing() {
+  const t = await getTranslations();
   return (
     <div className="landing min-h-screen bg-[#080808] font-sans text-white antialiased">
       {/* nav */}
       <header className="sticky top-0 z-30 border-b border-[var(--hairline)] bg-[#080808]/70 backdrop-blur-xl">
         <div className={`${WRAP} flex items-center justify-between py-3.5`} style={{ maxWidth: "var(--col)" }}>
           <div className="flex items-center gap-2 text-sm font-medium tracking-tight">
-            <Logo className="size-5" /> spatial-probe
+            <Logo className="size-5" /> {t("brand.name")}
           </div>
           <nav className="flex items-center gap-1" style={{ fontSize: "var(--fs-mono-md)" }}>
-            <Link href="/overview" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>Pipeline</Link>
-            <Link href="/prism" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>PRISM</Link>
-            <Link href="/evidence" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>Evidence</Link>
-            <Link href="/occquery" className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 text-[13px] font-medium text-black transition-opacity hover:opacity-90">Open Explorer <ArrowRight className="size-3.5" /></Link>
+            <Link href="/overview" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.pipeline")}</Link>
+            <Link href="/prism" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.prism")}</Link>
+            <Link href="/evidence" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.evidence")}</Link>
+            <LocaleToggle className="ml-1" />
+            <Link href="/occquery" className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 text-[13px] font-medium text-black transition-opacity hover:opacity-90">{t("nav.openExplorer")} <ArrowRight className="size-3.5" /></Link>
           </nav>
         </div>
       </header>
@@ -93,18 +99,17 @@ export default function Landing() {
           style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className={`${WRAP} relative pt-24 pb-12 text-center sm:pt-32`} style={{ maxWidth: "var(--col)" }}>
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--hairline)] bg-white/[0.03] px-3 py-1 font-mono uppercase" style={{ fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--ls-wide)", color: "var(--faint)" }}>
-            <span className="size-1.5 rounded-full" style={{ backgroundColor: "var(--data)" }} /> state, not render
+            <span className="size-1.5 rounded-full" style={{ backgroundColor: "var(--data)" }} /> {t("home.hero.eyebrow")}
           </div>
           <h1 className="text-balance" style={{ fontSize: "var(--fs-display)", fontWeight: "var(--w-display)", lineHeight: "var(--lh-display)", letterSpacing: "var(--ls-tight)", color: "var(--text)" }}>
-            Query, measure, and trust 3D scene state by what it physically means.
+            {t("home.hero.title")}
           </h1>
           <p className="mx-auto mt-6 text-balance" style={{ maxWidth: "var(--measure)", fontSize: "var(--fs-lead)", lineHeight: "var(--lh-prose)", color: "var(--muted)" }}>
-            Free-space, clearance, corridor width, dynamics — geometry an object-box pipeline cannot
-            express, with every number you can re-run. The spatial data engine for AV and robotics.
+            {t("home.hero.lead")}
           </p>
           <div className="mt-9 flex items-center justify-center gap-5">
-            <Link href="/occquery" className="inline-flex items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">Open Explorer <ArrowRight className="size-4" /></Link>
-            <Link href="/evidence" className="ink-link inline-flex items-center gap-1 text-sm" style={{ color: "var(--muted)" }}>See the evidence <ArrowRight className="size-3.5" /></Link>
+            <Link href="/occquery" className="inline-flex items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">{t("home.hero.openExplorer")} <ArrowRight className="size-4" /></Link>
+            <Link href="/evidence" className="ink-link inline-flex items-center gap-1 text-sm" style={{ color: "var(--muted)" }}>{t("home.hero.seeEvidence")} <ArrowRight className="size-3.5" /></Link>
           </div>
         </div>
         {/* product window — the signature output */}
@@ -113,7 +118,7 @@ export default function Landing() {
             <div className="flex items-center gap-2 border-b border-[var(--hairline)] bg-white/[0.02] px-4 py-2.5 font-mono" style={{ fontSize: "var(--fs-mono-xs)", color: "var(--dim)" }}>
               <span className="size-2.5 rounded-full bg-white/15" /><span className="size-2.5 rounded-full bg-white/15" /><span className="size-2.5 rounded-full bg-white/15" />
               <span className="ml-3">explorer · scene-0061 · top-down</span>
-              <span className="ml-auto inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">open live <ArrowRight className="size-3" /></span>
+              <span className="ml-auto inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">{t("home.window.openLive")} <ArrowRight className="size-3" /></span>
             </div>
             <OccupancyDiagram />
           </Link>
@@ -122,22 +127,23 @@ export default function Landing() {
 
       {/* the gap */}
       <section className={WRAP} style={{ ...SECTION, maxWidth: "var(--col)" }}>
-        <SectionLabel>the gap</SectionLabel>
+        <SectionLabel>{t("home.gap.label")}</SectionLabel>
         <div className="grid items-center gap-8 sm:grid-cols-2">
           <p style={{ fontSize: "var(--fs-body)", lineHeight: "var(--lh-prose)", color: "var(--muted)" }}>
-            Object-box pipelines store boxes. Planners drive through free space. spatial-probe measures
-            the free space — a wall <Metric tone="data">5.08&nbsp;m</Metric> beside the ego that box-only
-            never sees, because its nearest object box reads <Metric>9.49&nbsp;m</Metric> away.
+            {t.rich("home.gap.body", {
+              clearance: () => <Metric tone="data">5.08&nbsp;m</Metric>,
+              boxDistance: () => <Metric>9.49&nbsp;m</Metric>,
+            })}
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border bg-white/[0.03] p-5 text-center" style={{ borderColor: "var(--border-media)" }}>
               <div className="text-3xl"><Metric tone="data">5.08</Metric><span className="ml-0.5 text-base" style={{ color: "var(--faint)" }}>m</span></div>
-              <div className="mt-1.5 text-[11px]" style={{ color: "var(--muted)" }}>occupancy</div>
+              <div className="mt-1.5 text-[11px]" style={{ color: "var(--muted)" }}>{t("home.gap.occupancy")}</div>
               <div className="mt-0.5 font-mono text-[10px]" style={{ color: "var(--dim)" }}>lateral_clearance</div>
             </div>
             <div className="rounded-xl border bg-white/[0.015] p-5 text-center" style={{ borderColor: "var(--hairline)" }}>
               <div className="text-3xl"><Metric>9.49</Metric><span className="ml-0.5 text-base" style={{ color: "var(--dim)" }}>m</span></div>
-              <div className="mt-1.5 text-[11px]" style={{ color: "var(--faint)" }}>box-only</div>
+              <div className="mt-1.5 text-[11px]" style={{ color: "var(--faint)" }}>{t("home.gap.boxOnly")}</div>
               <div className="mt-0.5 font-mono text-[10px]" style={{ color: "var(--dim)" }}>box_distance</div>
             </div>
             <div className="col-span-2 text-center font-mono text-[10px]" style={{ color: "var(--dim)" }}>scene-0061 · frame 10 · re-runnable via probe_scene()</div>
@@ -147,12 +153,12 @@ export default function Landing() {
 
       {/* capability index — the one showcase section */}
       <section className={WRAP} style={{ ...SECTION, maxWidth: "var(--col)" }}>
-        <SectionLabel>the pipeline</SectionLabel>
+        <SectionLabel>{t("home.pipeline.label")}</SectionLabel>
         <div className="mb-1.5 flex items-baseline justify-between gap-4">
-          <h2 style={{ fontSize: "var(--fs-title)", fontWeight: "var(--w-title)", letterSpacing: "var(--ls-tight)", color: "var(--text)" }}>The pipeline, as capabilities</h2>
-          <Link href="/overview" className="ink-link font-mono" style={{ fontSize: "var(--fs-mono-sm)", color: "var(--faint)" }}>{SHIPPED}/{TOTAL} shipped · {IN_PROGRESS} live →</Link>
+          <h2 style={{ fontSize: "var(--fs-title)", fontWeight: "var(--w-title)", letterSpacing: "var(--ls-tight)", color: "var(--text)" }}>{t("home.pipeline.heading")}</h2>
+          <Link href="/overview" className="ink-link font-mono" style={{ fontSize: "var(--fs-mono-sm)", color: "var(--faint)" }}>{t("home.pipeline.shippedSummary", { shipped: SHIPPED, total: TOTAL, live: IN_PROGRESS })}</Link>
         </div>
-        <p className="mb-6" style={{ fontSize: "var(--fs-body-sm)", color: "var(--faint)" }}>Six axes of the data pipeline. Two are live. The rest are planned, and the rail says so.</p>
+        <p className="mb-6" style={{ fontSize: "var(--fs-body-sm)", color: "var(--faint)" }}>{t("home.pipeline.subhead")}</p>
         <div style={{ borderTop: "1px solid var(--hairline)" }}>
           {ALL_MODULES.map((m, i) => <CapabilityRow key={m.id} module={m} index={i} />)}
         </div>
@@ -160,30 +166,30 @@ export default function Landing() {
 
       {/* auditable measurement */}
       <section className={WRAP} style={{ ...SECTION, maxWidth: "var(--col)" }}>
-        <SectionLabel>auditable</SectionLabel>
-        <h2 style={{ fontSize: "var(--fs-title)", fontWeight: "var(--w-title)", letterSpacing: "var(--ls-tight)", color: "var(--text)" }}>Measurement you can audit</h2>
-        <p className="mb-6 mt-1.5" style={{ fontSize: "var(--fs-body-sm)", color: "var(--faint)" }}>A vendor whose own audit kills its own results is the one to trust.</p>
+        <SectionLabel>{t("home.auditable.label")}</SectionLabel>
+        <h2 style={{ fontSize: "var(--fs-title)", fontWeight: "var(--w-title)", letterSpacing: "var(--ls-tight)", color: "var(--text)" }}>{t("home.auditable.heading")}</h2>
+        <p className="mb-6 mt-1.5" style={{ fontSize: "var(--fs-body-sm)", color: "var(--faint)" }}>{t("home.auditable.subhead")}</p>
         <div className="grid gap-3 sm:grid-cols-3">
           {[
-            { title: "Reproducible", body: "Every number carries its call. probe_scene(scene, frame, predicate) regenerates it bit-for-bit." },
-            { title: "Pre-registered", body: "Hypothesis, analysis path, and kill criterion are committed before the data. HARKing shows in the diff." },
-            { title: "Independently graded", body: "H1 holds oracle-free. H3 is inconclusive — audited twice and retracted in public.", href: "/evidence" },
+            { key: "reproducible" as const, title: t("home.auditable.cards.reproducible.title"), body: t("home.auditable.cards.reproducible.body") },
+            { key: "preRegistered" as const, title: t("home.auditable.cards.preRegistered.title"), body: t("home.auditable.cards.preRegistered.body") },
+            { key: "independentlyGraded" as const, title: t("home.auditable.cards.independentlyGraded.title"), body: t("home.auditable.cards.independentlyGraded.body"), href: "/evidence" },
           ].map((c) => {
             const inner = (
               <GlassPanel className="flex h-full flex-col p-5">
                 <div style={{ fontSize: "var(--fs-body-sm)", fontWeight: "var(--w-title)", color: "var(--text)" }}>{c.title}</div>
                 <p className="mt-1.5 flex-1" style={{ fontSize: "var(--fs-prose-sm)", lineHeight: "var(--lh-prose)", color: "var(--muted)" }}>{c.body}</p>
-                {c.href && <div className="ink-link mt-3 inline-flex w-fit items-center gap-1 font-mono" style={{ fontSize: "var(--fs-mono-xs)", color: "var(--dim)" }}>see Evidence <ArrowRight className="size-3" /></div>}
+                {c.href && <div className="ink-link mt-3 inline-flex w-fit items-center gap-1 font-mono" style={{ fontSize: "var(--fs-mono-xs)", color: "var(--dim)" }}>{t("home.auditable.seeEvidence")} <ArrowRight className="size-3" /></div>}
               </GlassPanel>
             );
-            return c.href ? <Link key={c.title} href={c.href}>{inner}</Link> : <div key={c.title}>{inner}</div>;
+            return c.href ? <Link key={c.key} href={c.href}>{inner}</Link> : <div key={c.key}>{inner}</div>;
           })}
         </div>
         <div className="mt-5">
-          <div className="mb-2 font-mono uppercase" style={{ fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--ls-label)", color: "var(--dim)" }}>verdicts on file</div>
+          <div className="mb-2 font-mono uppercase" style={{ fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--ls-label)", color: "var(--dim)" }}>{t("home.auditable.verdictsOnFile")}</div>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
-            <span className="inline-flex items-center gap-2.5" style={{ fontSize: "var(--fs-body-sm)", color: "var(--muted)" }}><StatusChip verdict="HOLDS" /> H1 expressivity</span>
-            <span className="inline-flex items-center gap-2.5" style={{ fontSize: "var(--fs-body-sm)", color: "var(--muted)" }}><StatusChip verdict="INCONCLUSIVE" /> H3 denotation</span>
+            <span className="inline-flex items-center gap-2.5" style={{ fontSize: "var(--fs-body-sm)", color: "var(--muted)" }}><StatusChip verdict="HOLDS" /> {t("home.auditable.h1Label")}</span>
+            <span className="inline-flex items-center gap-2.5" style={{ fontSize: "var(--fs-body-sm)", color: "var(--muted)" }}><StatusChip verdict="INCONCLUSIVE" /> {t("home.auditable.h3Label")}</span>
           </div>
         </div>
       </section>
@@ -192,18 +198,18 @@ export default function Landing() {
       <section className={WRAP} style={{ ...SECTION, maxWidth: "var(--col)" }}>
         <GlassPanel className="flex flex-col items-center gap-5 p-8 text-center sm:flex-row sm:justify-between sm:text-left">
           <div>
-            <div style={{ fontSize: "var(--fs-title)", fontWeight: "var(--w-title)", color: "var(--text)" }}>One engine, three front doors.</div>
-            <div className="mt-1" style={{ fontSize: "var(--fs-body-sm)", color: "var(--muted)" }}>Explorer for the eye. A typed predicate for the query. MCP for the agent.</div>
+            <div style={{ fontSize: "var(--fs-title)", fontWeight: "var(--w-title)", color: "var(--text)" }}>{t("home.access.heading")}</div>
+            <div className="mt-1" style={{ fontSize: "var(--fs-body-sm)", color: "var(--muted)" }}>{t("home.access.subhead")}</div>
           </div>
-          <Link href="/occquery" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">Open Explorer <ArrowRight className="size-4" /></Link>
+          <Link href="/occquery" className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-5 py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90">{t("home.access.openExplorer")} <ArrowRight className="size-4" /></Link>
         </GlassPanel>
       </section>
 
       {/* footer */}
       <footer className={`${WRAP} pb-12 pt-6`} style={{ ...SECTION, maxWidth: "var(--col)" }}>
         <div className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: "1px solid var(--hairline)", fontSize: "var(--fs-prose-sm)", color: "var(--dim)" }}>
-          <p style={{ maxWidth: "var(--measure)", lineHeight: "var(--lh-prose)" }}>Runs on Occ3D-nuScenes and a deterministic predicate core. No validated F1 is claimed where no independent oracle exists. Negatives are headlines here, not footnotes.</p>
-          <div className="flex shrink-0 items-center gap-2" title={THESIS}><Logo className="size-4" /> state, not render</div>
+          <p style={{ maxWidth: "var(--measure)", lineHeight: "var(--lh-prose)" }}>{t("home.footer.blurb")}</p>
+          <div className="flex shrink-0 items-center gap-2" title={THESIS}><Logo className="size-4" /> {t("brand.tagline")}</div>
         </div>
       </footer>
     </div>

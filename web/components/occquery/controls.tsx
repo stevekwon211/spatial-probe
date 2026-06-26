@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { CAMERA_PRESETS, COLOR_MODES, COMING_SOON, useViewer, type Settings } from "./store";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ function ToggleRow({ label, k, kbd }: { label: string; k: keyof Settings; kbd?: 
 }
 
 function Seg<T extends string>({ value, opts, on }: { value: T; opts: { id: T; label: string; enabled?: boolean }[]; on: (v: T) => void }) {
+  const t = useTranslations();
   return (
     <div className="flex flex-wrap gap-1 px-1">
       {opts.map((o) => {
@@ -44,7 +46,7 @@ function Seg<T extends string>({ value, opts, on }: { value: T; opts: { id: T; l
             key={o.id}
             disabled={disabled}
             onClick={() => on(o.id)}
-            title={disabled ? "coming soon (needs export)" : undefined}
+            title={disabled ? t("occquery.controls.comingSoonTitle") : undefined}
             className={cn(
               "rounded-lg px-2.5 py-1 text-[11px] transition-colors",
               active
@@ -76,36 +78,53 @@ function SliderRow({ label, k, min, max, step }: { label: string; k: "voxelScale
   );
 }
 
+// Maps the stable English items in store.ts COMING_SOON to message keys (the list itself stays in
+// the store as the source of truth for which controls are gated; only the display string is localized).
+const COMING_SOON_ITEM_KEY: Record<string, string> = {
+  "Measurement tool": "measurementTool",
+  "Occupancy-flow vectors": "occupancyFlowVectors",
+  "Natural-language search": "nlSearch",
+  "Find similar scenes": "findSimilar",
+  "GT vs predicted diff": "gtVsPredicted",
+  "Embeddings (UMAP)": "embeddings",
+  "HD-map underlay": "hdMap",
+  "Multi-sensor panes": "multiSensor",
+  "SAM2 annotate": "sam2",
+};
+
 export function ControlPanel() {
+  const t = useTranslations();
   const set = useViewer((s) => s.set);
   const applyPreset = useViewer((s) => s.applyPreset);
   const colorMode = useViewer((s) => s.colorMode);
   const projection = useViewer((s) => s.projection);
   const voxelShape = useViewer((s) => s.voxelShape);
 
+  const colorOpts = COLOR_MODES.map((m) => ({ ...m, label: t(`occquery.colorModes.${m.id}`) }));
+
   return (
     <div className="space-y-4">
-      <Section title="Show">
-        <ToggleRow label="Occupancy voxels" k="showVoxels" kbd="O" />
-        <ToggleRow label="Ego vehicle" k="showEgo" kbd="E" />
-        <ToggleRow label="Heading" k="showForward" />
-        <ToggleRow label="Ground grid" k="showGrid" kbd="G" />
-        <ToggleRow label="Reachable free-space" k="showReachable" />
-        <ToggleRow label="Wireframe" k="wireframe" />
-        <ToggleRow label="Stats (FPS)" k="showStats" />
+      <Section title={t("occquery.controls.show")}>
+        <ToggleRow label={t("occquery.controls.occupancyVoxels")} k="showVoxels" kbd="O" />
+        <ToggleRow label={t("occquery.controls.egoVehicle")} k="showEgo" kbd="E" />
+        <ToggleRow label={t("occquery.controls.heading")} k="showForward" />
+        <ToggleRow label={t("occquery.controls.groundGrid")} k="showGrid" kbd="G" />
+        <ToggleRow label={t("occquery.controls.reachableFreeSpace")} k="showReachable" />
+        <ToggleRow label={t("occquery.controls.wireframe")} k="wireframe" />
+        <ToggleRow label={t("occquery.controls.statsFps")} k="showStats" />
       </Section>
 
-      <Section title="Color by">
-        <Seg value={colorMode} opts={COLOR_MODES} on={(v) => set("colorMode", v)} />
+      <Section title={t("occquery.controls.colorBy")}>
+        <Seg value={colorMode} opts={colorOpts} on={(v) => set("colorMode", v)} />
       </Section>
 
-      <Section title="Voxel">
-        <Seg value={voxelShape} opts={[{ id: "cube", label: "Cube" }, { id: "sphere", label: "Sphere" }]} on={(v) => set("voxelShape", v)} />
-        <SliderRow label="Size" k="voxelScale" min={0.3} max={1} step={0.05} />
-        <SliderRow label="Opacity" k="voxelOpacity" min={0.2} max={1} step={0.05} />
+      <Section title={t("occquery.controls.voxel")}>
+        <Seg value={voxelShape} opts={[{ id: "cube", label: t("occquery.voxelShape.cube") }, { id: "sphere", label: t("occquery.voxelShape.sphere") }]} on={(v) => set("voxelShape", v)} />
+        <SliderRow label={t("occquery.controls.size")} k="voxelScale" min={0.3} max={1} step={0.05} />
+        <SliderRow label={t("occquery.controls.opacity")} k="voxelOpacity" min={0.2} max={1} step={0.05} />
       </Section>
 
-      <Section title="Camera">
+      <Section title={t("occquery.controls.camera")}>
         <div className="flex flex-wrap gap-1 px-1">
           {CAMERA_PRESETS.map((p) => (
             <button
@@ -113,18 +132,18 @@ export function ControlPanel() {
               onClick={() => applyPreset(p.id)}
               className="rounded-lg px-2.5 py-1 text-[11px] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/80"
             >
-              {p.label}
+              {t(`occquery.cameraPresets.${p.id}`)}
             </button>
           ))}
         </div>
-        <Seg value={projection} opts={[{ id: "perspective", label: "Persp" }, { id: "orthographic", label: "Ortho" }]} on={(v) => set("projection", v)} />
+        <Seg value={projection} opts={[{ id: "perspective", label: t("occquery.projection.perspective") }, { id: "orthographic", label: t("occquery.projection.orthographic") }]} on={(v) => set("projection", v)} />
       </Section>
 
-      <Section title="Coming soon">
+      <Section title={t("occquery.controls.comingSoon")}>
         {COMING_SOON.flatMap((g) => g.items).map((it) => (
           <div key={it} className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-white/20">
-            <span>{it}</span>
-            <span className="text-[9px] uppercase tracking-wider">soon</span>
+            <span>{COMING_SOON_ITEM_KEY[it] ? t(`occquery.comingSoonItems.${COMING_SOON_ITEM_KEY[it]}`) : it}</span>
+            <span className="text-[9px] uppercase tracking-wider">{t("occquery.controls.soon")}</span>
           </div>
         ))}
       </Section>

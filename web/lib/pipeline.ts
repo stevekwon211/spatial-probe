@@ -7,7 +7,8 @@ export type Status = "done" | "in-progress" | "planned";
 
 export interface ModuleItem {
   id: string;
-  title: string;
+  i18nKey: string; // message key under pipeline.modules.* (title/axis/oneLine/statusLabel)
+  title: string; // canonical English; display strings resolve from messages by i18nKey
   axis: string;
   oneLine: string;
   status: Status;
@@ -17,7 +18,8 @@ export interface ModuleItem {
 
 export interface Stage {
   id: string;
-  name: string;
+  i18nKey: string; // message key under pipeline.stages.* (name/blurb)
+  name: string; // canonical English; display strings resolve from messages by i18nKey
   blurb: string;
   icon: LucideIcon;
   modules: ModuleItem[];
@@ -29,12 +31,14 @@ export const THESIS =
 export const PIPELINE: Stage[] = [
   {
     id: "ingest",
+    i18nKey: "ingest",
     name: "Ingest",
     blurb: "Raw multi-sensor logs become 3D state: objects, HD map, occupancy.",
     icon: Database,
     modules: [
       {
         id: "asof",
+        i18nKey: "asof",
         title: "ASOF",
         axis: "render to state",
         oneLine:
@@ -46,6 +50,7 @@ export const PIPELINE: Stage[] = [
   },
   {
     id: "search",
+    i18nKey: "search",
     name: "Search",
     blurb:
       "Find scenes by measured physical quantities, reproducibly. No hallucination.",
@@ -53,6 +58,7 @@ export const PIPELINE: Stage[] = [
     modules: [
       {
         id: "occquery",
+        i18nKey: "occquery",
         title: "OccQuery",
         axis: "geometry / occupancy",
         oneLine:
@@ -65,12 +71,14 @@ export const PIPELINE: Stage[] = [
   },
   {
     id: "qa",
+    i18nKey: "qa",
     name: "QA / Review",
     blurb: "Decide where auto-labels are safe and where a human must look.",
     icon: ShieldCheck,
     modules: [
       {
         id: "gt-distrust",
+        i18nKey: "gtDistrust",
         title: "GT-distrust",
         axis: "visibility",
         oneLine:
@@ -80,6 +88,7 @@ export const PIPELINE: Stage[] = [
       },
       {
         id: "calibration",
+        i18nKey: "calibration",
         title: "Visibility Calibration",
         axis: "uncertainty",
         oneLine:
@@ -91,12 +100,14 @@ export const PIPELINE: Stage[] = [
   },
   {
     id: "loop",
+    i18nKey: "loop",
     name: "Curation / Loop",
     blurb: "Pick what to fix and what to label so the model actually improves.",
     icon: RefreshCw,
     modules: [
       {
         id: "value",
+        i18nKey: "value",
         title: "Value-of-Correction",
         axis: "valuation",
         oneLine:
@@ -106,6 +117,7 @@ export const PIPELINE: Stage[] = [
       },
       {
         id: "dynfield",
+        i18nKey: "dynfield",
         title: "DynField-Necessity",
         axis: "dynamics / time",
         oneLine:

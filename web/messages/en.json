@@ -1,0 +1,331 @@
+{
+  "brand": {
+    "name": "spatial-probe",
+    "tagline": "state, not render",
+    "thesis": "3D is queryable, updatable state, not the render."
+  },
+  "nav": {
+    "pipeline": "Pipeline",
+    "prism": "PRISM",
+    "evidence": "Evidence",
+    "openExplorer": "Open Explorer"
+  },
+  "home": {
+    "metaTitle": "spatial-probe — the spatial data engine for AV and robotics",
+    "metaDescription": "Query, measure, and trust 3D scene state by what it physically means — free-space, clearance, corridor width, dynamics — with every number you can re-run.",
+    "hero": {
+      "eyebrow": "state, not render",
+      "title": "Query, measure, and trust 3D scene state by what it physically means.",
+      "lead": "Free-space, clearance, corridor width, dynamics — geometry an object-box pipeline cannot express, with every number you can re-run. The spatial data engine for AV and robotics.",
+      "openExplorer": "Open Explorer",
+      "seeEvidence": "See the evidence"
+    },
+    "window": {
+      "openLive": "open live"
+    },
+    "gap": {
+      "label": "the gap",
+      "body": "Object-box pipelines store boxes. Planners drive through free space. spatial-probe measures the free space — a wall <clearance></clearance> beside the ego that box-only never sees, because its nearest object box reads <boxDistance></boxDistance> away.",
+      "occupancy": "occupancy",
+      "boxOnly": "box-only"
+    },
+    "pipeline": {
+      "label": "the pipeline",
+      "heading": "The pipeline, as capabilities",
+      "shippedSummary": "{shipped}/{total} shipped · {live} live →",
+      "subhead": "Six axes of the data pipeline. Two are live. The rest are planned, and the rail says so."
+    },
+    "auditable": {
+      "label": "auditable",
+      "heading": "Measurement you can audit",
+      "subhead": "A vendor whose own audit kills its own results is the one to trust.",
+      "cards": {
+        "reproducible": {
+          "title": "Reproducible",
+          "body": "Every number carries its call. probe_scene(scene, frame, predicate) regenerates it bit-for-bit."
+        },
+        "preRegistered": {
+          "title": "Pre-registered",
+          "body": "Hypothesis, analysis path, and kill criterion are committed before the data. HARKing shows in the diff."
+        },
+        "independentlyGraded": {
+          "title": "Independently graded",
+          "body": "H1 holds oracle-free. H3 is inconclusive — audited twice and retracted in public."
+        }
+      },
+      "seeEvidence": "see Evidence",
+      "verdictsOnFile": "verdicts on file",
+      "h1Label": "H1 expressivity",
+      "h3Label": "H3 denotation"
+    },
+    "access": {
+      "heading": "One engine, three front doors.",
+      "subhead": "Explorer for the eye. A typed predicate for the query. MCP for the agent.",
+      "openExplorer": "Open Explorer"
+    },
+    "footer": {
+      "blurb": "Runs on Occ3D-nuScenes and a deterministic predicate core. No validated F1 is claimed where no independent oracle exists. Negatives are headlines here, not footnotes."
+    }
+  },
+  "overview": {
+    "projects": "Projects",
+    "pipelineLabel": "Pipeline",
+    "pipelineNodes": "{count} nodes",
+    "evidence": "Evidence",
+    "evidenceMeta": "verdicts",
+    "newProject": "New project",
+    "soon": "soon",
+    "shippedSummary": "{shipped}/{total} shipped, {live} live",
+    "status": {
+      "live": "live",
+      "shipped": "shipped",
+      "planned": "planned"
+    }
+  },
+  "pipeline": {
+    "stages": {
+      "ingest": {
+        "name": "Ingest",
+        "blurb": "Raw multi-sensor logs become 3D state: objects, HD map, occupancy."
+      },
+      "search": {
+        "name": "Search",
+        "blurb": "Find scenes by measured physical quantities, reproducibly. No hallucination."
+      },
+      "qa": {
+        "name": "QA / Review",
+        "blurb": "Decide where auto-labels are safe and where a human must look."
+      },
+      "loop": {
+        "name": "Curation / Loop",
+        "blurb": "Pick what to fix and what to label so the model actually improves."
+      }
+    },
+    "modules": {
+      "asof": {
+        "title": "ASOF",
+        "axis": "render to state",
+        "oneLine": "Does the converted state preserve action-relevant signal, or only look right? An acceptance gate at the door.",
+        "statusLabel": "Planned"
+      },
+      "occquery": {
+        "title": "OccQuery",
+        "axis": "geometry / occupancy",
+        "oneLine": "Occupancy-native predicates measure box-blind free-space geometry (clearance, free-width) that object-box query languages cannot express.",
+        "statusLabel": "H1 expressivity holds · H3 inconclusive"
+      },
+      "gtDistrust": {
+        "title": "GT-distrust",
+        "axis": "visibility",
+        "oneLine": "Occlusion geometry predicts which occupancy labels are untrustworthy. A geometric review trigger.",
+        "statusLabel": "Planned"
+      },
+      "calibration": {
+        "title": "Visibility Calibration",
+        "axis": "uncertainty",
+        "oneLine": "Is the model's confidence honest where the sensor cannot see? Catch the silent overconfidence.",
+        "statusLabel": "Planned"
+      },
+      "value": {
+        "title": "Value-of-Correction",
+        "axis": "valuation",
+        "oneLine": "Rank scenes by how much fixing a label actually moves the model, not how many are wrong.",
+        "statusLabel": "Planned"
+      },
+      "dynfield": {
+        "title": "DynField-Necessity",
+        "axis": "dynamics / time",
+        "oneLine": "Which stored motion fields a planner truly needs, and in which moments (cut-in, hard brake, low TTC).",
+        "statusLabel": "Tier-1: velocity redundant when safe"
+      }
+    }
+  },
+  "capabilityRow": {
+    "live": "live",
+    "shipped": "shipped",
+    "planned": "planned"
+  },
+  "prism": {
+    "metaTitle": "PRISM — find the scenes where the model is wrong",
+    "metaDescription": "An open spatial-failure-search engine whose answers carry a label-free correctness check. Find the frames that break a perception model, in a few lines.",
+    "hero": {
+      "eyebrow": "PRISM",
+      "title": "Find the scenes where the model is wrong, in a few lines.",
+      "lead": "An open spatial-failure-search engine whose answers carry a label-free correctness check. You query for a failure mode; every hit comes back tagged with which independent check backs it, and how far to trust it.",
+      "seeFailures": "See the failures",
+      "seeEvidence": "See the evidence"
+    },
+    "frames": {
+      "label": "the wow · model-eval",
+      "heading": "Frames that break a detector",
+      "summary": "{candidates} candidates · {clusters} clusters",
+      "legendBefore": "Each scene scored against AV2 ground-truth boxes. ",
+      "legendGreen": "Green",
+      "legendMid": " = the detector saw it. ",
+      "legendRed": "Red",
+      "legendAfter": " = ground-truth object the model missed.",
+      "captionPrefix": "detector saw {detected}, MISSED {missed}: {objects}",
+      "honest": "Honest: COCO-YOLOv8n detector (NOT trained on AV2) → cross-distribution recall, coarse car/bus/truck→vehicle class map, class-agnostic match. A miss = the detector's recall failure, not an occupancy claim."
+    },
+    "differentiator": {
+      "label": "the differentiator · H1",
+      "heading": "Occupancy sees what box-only structurally can't",
+      "subhead": "One scene in the demo where the path is blocked but no tracked box explains it — the failure mode a box-only language has no words for.",
+      "bevCaptionBefore": "Occupancy blocks the ego in-path band at ",
+      "bevCaptionAfter": ", and no tracked box within 5 m explains it.",
+      "occupancy": "occupancy",
+      "boxOnly": "box-only",
+      "freeSpaceCoverage": "free-space query coverage",
+      "expressivityGap": "expressivity gap",
+      "queriesSummary": "{queries} free-space queries · {families}"
+    },
+    "honesty": {
+      "label": "the honesty layer",
+      "heading": "Every result says how much to trust it",
+      "subhead": "Each failure type is tagged by which independent check backs it. This is the differentiator — no result is presented without its provenance.",
+      "independentCheck": "independent check",
+      "consistencyOnly": "consistency only",
+      "oraclesOnFile": "oracles on file",
+      "external": "EXTERNAL",
+      "fpDenotation": "FP-side denotation",
+      "agreement": "agreement {value}",
+      "voxelRibbonFp": "· voxel-ribbon FP {value}",
+      "boxOnly": "· box-only {value}",
+      "gpuGated": "External (BLOCKED-side) unboxed-obstacle recall is GPU-gated — empirically closed solo/CPU this session. Not claimed.",
+      "kind": {
+        "modelEval": "model-eval",
+        "externalFp": "external-fp",
+        "consistencyOnly": "consistency-only"
+      }
+    },
+    "catalogue": {
+      "label": "catalogue · demo scope",
+      "heading": "What the demo actually swept",
+      "subhead": "A bounded subset of the AV2 corpus, stated honestly — not a full-corpus sweep.",
+      "colSignature": "signature",
+      "colCandidates": "candidates",
+      "colClusters": "clusters",
+      "colLogs": "logs",
+      "colScope": "scope",
+      "scopeCell": "{logs} logs · stride {stride} · {frames} frames"
+    },
+    "footer": {
+      "blurb": "Runs on Argoverse 2 sensor logs. No externally-validated recall is claimed where no independent oracle exists; the only external check on file is the traversal (FP-direction) oracle. Negatives are headlines here, not footnotes.",
+      "h1Label": "H1 expressivity"
+    },
+    "captionFallback": "see caption"
+  },
+  "evidence": {
+    "metaTitle": "Evidence — spatial-probe",
+    "metaDescription": "Every claim, its verdict, and how it was graded. Negatives included.",
+    "heading": "Evidence",
+    "countSuffix": "{count} {verdict}",
+    "intro": "Every claim, its verdict, and how it was graded. Negatives included — measurement-honesty is a feature, not a footnote. The H3 row is a result we audited twice and retracted; it is shown, not buried.",
+    "columns": {
+      "claim": "claim",
+      "axis": "axis",
+      "verdict": "verdict",
+      "gradedBy": "graded by"
+    }
+  },
+  "occquery": {
+    "back": "occquery",
+    "reset": "reset",
+    "programVerdict": "H1 expressivity {h1} (oracle-free) · H3 {h3}",
+    "renderMode": {
+      "voxel": "voxel",
+      "lidar": "LiDAR",
+      "both": "both"
+    },
+    "rows": {
+      "speed": "speed",
+      "obstacles": "obstacles",
+      "minFreeWidth": "min_free_width",
+      "lateralClearance": "lateral_clearance",
+      "boxDistance": "box_distance",
+      "freePathBlocked": "free_path_blocked",
+      "none": "none"
+    },
+    "needsExport": "needs export",
+    "legend": "box-only sees vehicles and peds, occquery sees all",
+    "ask": {
+      "title": "Ask occquery",
+      "soon": "soon",
+      "body": "Ask in plain language. occquery turns the question into geometric predicates and jumps to the matching frames.",
+      "placeholder": "Ask a question…"
+    },
+    "controls": {
+      "show": "Show",
+      "occupancyVoxels": "Occupancy voxels",
+      "egoVehicle": "Ego vehicle",
+      "heading": "Heading",
+      "groundGrid": "Ground grid",
+      "reachableFreeSpace": "Reachable free-space",
+      "wireframe": "Wireframe",
+      "statsFps": "Stats (FPS)",
+      "colorBy": "Color by",
+      "voxel": "Voxel",
+      "size": "Size",
+      "opacity": "Opacity",
+      "camera": "Camera",
+      "comingSoon": "Coming soon",
+      "soon": "soon",
+      "comingSoonTitle": "coming soon (needs export)"
+    },
+    "colorModes": {
+      "flat": "Flat",
+      "height": "Height",
+      "forward": "Forward",
+      "lateral": "Lateral",
+      "semantic": "Semantic",
+      "state": "Occ state"
+    },
+    "voxelShape": {
+      "cube": "Cube",
+      "sphere": "Sphere"
+    },
+    "projection": {
+      "perspective": "Persp",
+      "orthographic": "Ortho"
+    },
+    "cameraPresets": {
+      "iso": "3/4",
+      "bev": "Top",
+      "front": "Front",
+      "side": "Side",
+      "rear": "Rear",
+      "driver": "Driver"
+    },
+    "comingSoonGroups": {
+      "overlays": "Overlays",
+      "search": "Search",
+      "panels": "Panels"
+    },
+    "comingSoonItems": {
+      "measurementTool": "Measurement tool",
+      "occupancyFlowVectors": "Occupancy-flow vectors",
+      "nlSearch": "Natural-language search",
+      "findSimilar": "Find similar scenes",
+      "gtVsPredicted": "GT vs predicted diff",
+      "embeddings": "Embeddings (UMAP)",
+      "hdMap": "HD-map underlay",
+      "multiSensor": "Multi-sensor panes",
+      "sam2": "SAM2 annotate"
+    },
+    "verdictHero": {
+      "noMeasurement": "No measurement available for this frame — occupancy predicate returned null.",
+      "surfaceGap": "A solid surface {clearance} off the ego that the box pipeline ranges at {boxDistance} — a {gap} gap no box query can name.",
+      "boxCloser": "Box ranges the nearest object at {boxDistance}; occupancy reads {clearance} of reachable clearance here.",
+      "agree": "Box and occupancy agree at {boxDistance} lateral — no gap between the two measurements for this frame.",
+      "why": "why",
+      "hide": "hide",
+      "dossierTitle": "H1 dossier — verbatim"
+    },
+    "ribbon": {
+      "title": "box − lateral gap (m)",
+      "clickToSeek": "click to seek",
+      "nearMiss": "NM = near-miss",
+      "verdictFlip": "- - VF = verdict flip"
+    }
+  }
+}

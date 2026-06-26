@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type * as THREE from "three";
 import Link from "next/link";
 import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
@@ -8,6 +9,7 @@ import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Box, type LidarPoint, type 
 import { ControlPanel } from "./controls";
 import { useViewer, type RenderMode } from "./store";
 import { GlassPanel } from "./glass";
+import { LocaleToggle } from "@/components/locale-toggle";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -41,11 +43,12 @@ function Row({ k, v, hot }: { k: string; v: string; hot?: boolean }) {
 }
 
 function Legend({ obstacles }: { obstacles: Obstacle[] }) {
+  const t = useTranslations();
   const present = Array.from(new Set(obstacles.map((o) => o[3]))).sort((a, b) => a - b);
   if (!present.length) return null;
   return (
     <div className="mb-3 rounded-lg border border-white/10 bg-white/[0.03] p-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">box-only sees vehicles and peds, occquery sees all</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">{t("occquery.legend")}</div>
       <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
         {present.map((c) => (
           <div key={c} className="flex items-center gap-1.5">
@@ -71,6 +74,7 @@ function IconButton({ onClick, label, children }: { onClick: () => void; label: 
 }
 
 export function OccqueryViewer() {
+  const t = useTranslations();
   const [scenes, setScenes] = useState<string[]>([]);
   const [scene, setScene] = useState("scene-0061");
   const [meta, setMeta] = useState<SceneMeta | null>(null);
@@ -219,17 +223,20 @@ export function OccqueryViewer() {
             className="flex items-center gap-1 text-sm font-medium tracking-tight text-white/90 transition-colors hover:text-white"
           >
             <ChevronLeft className="size-3.5 text-white/40" />
-            occquery
+            {t("occquery.back")}
           </Link>
-          <button onClick={reset} className="flex items-center gap-1 text-[11px] text-white/40 transition-colors hover:text-white/70">
-            <RotateCcw className="size-3" />
-            reset
-          </button>
+          <div className="flex items-center gap-2">
+            <LocaleToggle />
+            <button onClick={reset} className="flex items-center gap-1 text-[11px] text-white/40 transition-colors hover:text-white/70">
+              <RotateCcw className="size-3" />
+              {t("occquery.reset")}
+            </button>
+          </div>
         </div>
 
         {/* program-level verdict — stated ONCE, achromatic chrome, NOT per-frame (no oracle) */}
         <div className="px-3 pb-1 font-mono text-[10px] tracking-wide text-white/30">
-          H1 expressivity {H1_FINDING?.verdict ?? "HOLDS"} (oracle-free) · H3 {H3_FINDING?.verdict ?? "INCONCLUSIVE"}
+          {t("occquery.programVerdict", { h1: H1_FINDING?.verdict ?? "HOLDS", h3: H3_FINDING?.verdict ?? "INCONCLUSIVE" })}
         </div>
 
         <div className="px-3 pb-2">
@@ -255,7 +262,7 @@ export function OccqueryViewer() {
                   renderMode === m ? "bg-white/15 text-white" : "text-white/45 hover:text-white/80",
                 )}
               >
-                {m === "voxel" ? "voxel" : m === "points" ? "LiDAR" : "both"}
+                {m === "voxel" ? t("occquery.renderMode.voxel") : m === "points" ? t("occquery.renderMode.lidar") : t("occquery.renderMode.both")}
               </button>
             ))}
           </div>
@@ -272,14 +279,14 @@ export function OccqueryViewer() {
             <div className="space-y-1 rounded-lg bg-white/[0.04] p-2.5 font-mono text-xs">
               <Row k="speed" v={`${fm.speed} m/s`} />
               <Row k="obstacles" v={`${fm.n_obstacles_band}`} />
-              <Row k="min_free_width" v={p.min_free_width === null ? "none" : `${p.min_free_width} m`} />
-              <Row k="lateral_clearance" v={p.lateral_clearance === null ? "none" : `${p.lateral_clearance} m`} />
-              <Row k="box_distance" v={p.box_distance == null ? "none" : `${p.box_distance} m`} />
+              <Row k="min_free_width" v={p.min_free_width === null ? t("occquery.rows.none") : `${p.min_free_width} m`} />
+              <Row k="lateral_clearance" v={p.lateral_clearance === null ? t("occquery.rows.none") : `${p.lateral_clearance} m`} />
+              <Row k="box_distance" v={p.box_distance == null ? t("occquery.rows.none") : `${p.box_distance} m`} />
               <Row k="free_path_blocked" v={p.free_path_blocked ? "TRUE" : "false"} hot={p.free_path_blocked} />
             </div>
             {/* not exported — never faked as a live number (see repo result-framing law) */}
             <div className="space-y-1 rounded-lg border border-white/[0.05] p-2.5 font-mono text-xs opacity-40">
-              <div className="mb-0.5 text-[9px] uppercase tracking-wide text-white/20">needs export</div>
+              <div className="mb-0.5 text-[9px] uppercase tracking-wide text-white/20">{t("occquery.needsExport")}</div>
               <Row k="occlusion %" v="—" />
               <Row k="TTC" v="—" />
               <Row k="action-delta" v="—" />
@@ -297,16 +304,16 @@ export function OccqueryViewer() {
       <GlassPanel className="absolute top-4 right-4 bottom-4 flex w-80 flex-col text-white">
         <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
           <Sparkles className="size-4 text-white/60" />
-          <span className="text-sm font-medium">Ask occquery</span>
-          <span className="ml-auto rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/50">soon</span>
+          <span className="text-sm font-medium">{t("occquery.ask.title")}</span>
+          <span className="ml-auto rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/50">{t("occquery.ask.soon")}</span>
         </div>
         <div className="flex flex-1 items-center justify-center px-6 text-center">
           <p className="text-xs leading-relaxed text-white/40">
-            Ask in plain language. occquery turns the question into geometric predicates and jumps to the matching frames.
+            {t("occquery.ask.body")}
           </p>
         </div>
         <div className="border-t border-white/10 p-3">
-          <div className="flex h-9 items-center rounded-xl bg-white/[0.04] px-3 text-xs text-white/30">Ask a question…</div>
+          <div className="flex h-9 items-center rounded-xl bg-white/[0.04] px-3 text-xs text-white/30">{t("occquery.ask.placeholder")}</div>
         </div>
       </GlassPanel>
 

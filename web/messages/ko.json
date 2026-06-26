@@ -1,0 +1,331 @@
+{
+  "brand": {
+    "name": "spatial-probe",
+    "tagline": "렌더가 아니라 상태",
+    "thesis": "3D는 렌더가 아니라 쿼리·갱신 가능한 상태다."
+  },
+  "nav": {
+    "pipeline": "파이프라인",
+    "prism": "PRISM",
+    "evidence": "증거",
+    "openExplorer": "탐색기 열기"
+  },
+  "home": {
+    "metaTitle": "spatial-probe — AV·로보틱스용 공간 데이터 엔진",
+    "metaDescription": "3D 장면 상태를 물리적 의미로 쿼리·측정·신뢰한다 — 자유공간, 여유간격, 통로폭, 동역학 — 모든 숫자는 다시 돌릴 수 있다.",
+    "hero": {
+      "eyebrow": "렌더가 아니라 상태",
+      "title": "3D 장면 상태를, 물리적 의미로 쿼리·측정·신뢰한다.",
+      "lead": "자유공간·여유간격·통로폭·동역학 — 객체-박스 파이프라인이 표현 못 하는 기하, 모든 숫자는 재실행 가능. AV·로보틱스용 공간 데이터 엔진.",
+      "openExplorer": "탐색기 열기",
+      "seeEvidence": "증거 보기"
+    },
+    "window": {
+      "openLive": "라이브 열기"
+    },
+    "gap": {
+      "label": "그 간극",
+      "body": "객체-박스 파이프라인은 박스를 저장한다. 플래너는 자유공간을 달린다. spatial-probe는 그 자유공간을 측정한다 — 자차 옆 <clearance></clearance>의 벽을, box-only는 영영 못 본다. 가장 가까운 객체 박스가 <boxDistance></boxDistance> 떨어져 읽히기 때문이다.",
+      "occupancy": "occupancy",
+      "boxOnly": "box-only"
+    },
+    "pipeline": {
+      "label": "파이프라인",
+      "heading": "능력으로 본 파이프라인",
+      "shippedSummary": "{shipped}/{total} 배포 · {live} 라이브 →",
+      "subhead": "데이터 파이프라인의 6개 축. 둘은 라이브. 나머지는 예정이고, 레일에 그렇게 표시한다."
+    },
+    "auditable": {
+      "label": "감사가능",
+      "heading": "감사할 수 있는 측정",
+      "subhead": "자기 감사로 자기 결과를 죽이는 벤더가, 믿을 만한 벤더다.",
+      "cards": {
+        "reproducible": {
+          "title": "재현가능",
+          "body": "모든 숫자가 자기 호출을 가지고 다닌다. probe_scene(scene, frame, predicate)이 비트 단위로 재생성한다."
+        },
+        "preRegistered": {
+          "title": "사전등록",
+          "body": "가설·분석 경로·kill 기준을 데이터 전에 커밋한다. HARKing은 diff에 드러난다."
+        },
+        "independentlyGraded": {
+          "title": "독립 채점",
+          "body": "H1은 오라클 없이 성립. H3는 결론 못 냄 — 두 번 감사하고 공개 철회."
+        }
+      },
+      "seeEvidence": "증거 보기",
+      "verdictsOnFile": "기록된 판정",
+      "h1Label": "H1 표현력",
+      "h3Label": "H3 denotation"
+    },
+    "access": {
+      "heading": "엔진 하나, 정문 셋.",
+      "subhead": "눈에는 탐색기. 쿼리에는 타입 있는 predicate. 에이전트에는 MCP.",
+      "openExplorer": "탐색기 열기"
+    },
+    "footer": {
+      "blurb": "Occ3D-nuScenes와 결정론적 predicate 코어 위에서 돈다. 독립 오라클이 없는 곳에선 검증된 F1을 주장하지 않는다. 여기선 부정 결과가 각주가 아니라 헤드라인이다."
+    }
+  },
+  "overview": {
+    "projects": "프로젝트",
+    "pipelineLabel": "파이프라인",
+    "pipelineNodes": "노드 {count}개",
+    "evidence": "증거",
+    "evidenceMeta": "판정",
+    "newProject": "새 프로젝트",
+    "soon": "예정",
+    "shippedSummary": "{shipped}/{total} 배포, {live} 라이브",
+    "status": {
+      "live": "라이브",
+      "shipped": "배포됨",
+      "planned": "예정"
+    }
+  },
+  "pipeline": {
+    "stages": {
+      "ingest": {
+        "name": "수집",
+        "blurb": "원시 멀티센서 로그가 3D 상태가 된다: 객체, HD 맵, occupancy."
+      },
+      "search": {
+        "name": "검색",
+        "blurb": "측정된 물리량으로 장면을 찾는다, 재현가능하게. 환각 없이."
+      },
+      "qa": {
+        "name": "QA / 리뷰",
+        "blurb": "자동 라벨이 안전한 곳과 사람이 봐야 하는 곳을 가른다."
+      },
+      "loop": {
+        "name": "큐레이션 / 루프",
+        "blurb": "모델이 실제로 좋아지도록 무엇을 고치고 무엇을 라벨할지 고른다."
+      }
+    },
+    "modules": {
+      "asof": {
+        "title": "ASOF",
+        "axis": "렌더 → 상태",
+        "oneLine": "변환된 상태가 행동에 중요한 신호를 보존하나, 아니면 보기에만 맞나? 문턱의 합격 게이트.",
+        "statusLabel": "예정"
+      },
+      "occquery": {
+        "title": "OccQuery",
+        "axis": "기하 / occupancy",
+        "oneLine": "occupancy-native predicate가 객체-박스 쿼리 언어로는 표현 못 하는 box-blind 자유공간 기하(여유간격, free-width)를 측정한다.",
+        "statusLabel": "H1 표현력 성립 · H3 결론 못 냄"
+      },
+      "gtDistrust": {
+        "title": "GT-distrust",
+        "axis": "가시성",
+        "oneLine": "가림 기하가 어느 occupancy 라벨이 못 믿을 것인지 예측한다. 기하학적 리뷰 트리거.",
+        "statusLabel": "예정"
+      },
+      "calibration": {
+        "title": "Visibility Calibration",
+        "axis": "불확실성",
+        "oneLine": "센서가 못 보는 곳에서 모델의 확신이 정직한가? 조용한 과신을 잡아낸다.",
+        "statusLabel": "예정"
+      },
+      "value": {
+        "title": "Value-of-Correction",
+        "axis": "가치평가",
+        "oneLine": "몇 개가 틀렸나가 아니라, 라벨을 고치면 모델이 얼마나 움직이나로 장면 순위를 매긴다.",
+        "statusLabel": "예정"
+      },
+      "dynfield": {
+        "title": "DynField-Necessity",
+        "axis": "동역학 / 시간",
+        "oneLine": "플래너가 저장된 모션 필드를 진짜 필요로 하는 때는 언제인가(cut-in, 급제동, 낮은 TTC).",
+        "statusLabel": "Tier-1: 안전할 땐 속도 정보 불필요"
+      }
+    }
+  },
+  "capabilityRow": {
+    "live": "라이브",
+    "shipped": "배포됨",
+    "planned": "예정"
+  },
+  "prism": {
+    "metaTitle": "PRISM — 모델이 틀리는 장면을 찾는다",
+    "metaDescription": "답에 label-free 정확성 체크가 붙는 오픈 공간-실패-검색 엔진. 인지 모델을 망가뜨리는 프레임을, 몇 줄로 찾는다.",
+    "hero": {
+      "eyebrow": "PRISM",
+      "title": "모델이 틀리는 장면을, 몇 줄로 찾는다.",
+      "lead": "답에 label-free 정확성 체크가 붙는 오픈 공간-실패-검색 엔진. 실패 모드를 쿼리하면, 모든 결과에 어떤 독립 체크가 뒷받침하는지·얼마나 믿을지가 태그로 돌아온다.",
+      "seeFailures": "실패 보기",
+      "seeEvidence": "증거 보기"
+    },
+    "frames": {
+      "label": "the wow · 모델 평가",
+      "heading": "검출기를 망가뜨리는 프레임",
+      "summary": "후보 {candidates}개 · 클러스터 {clusters}개",
+      "legendBefore": "각 장면을 AV2 정답 박스로 채점. ",
+      "legendGreen": "초록",
+      "legendMid": " = 검출기가 봄. ",
+      "legendRed": "빨강",
+      "legendAfter": " = 모델이 놓친 정답 객체.",
+      "captionPrefix": "검출기가 {detected}개 봤는데 {missed}개 놓침: {objects}",
+      "honest": "정직하게: COCO-YOLOv8n 검출기(AV2 학습 아님) → 분포 밖 recall, car/bus/truck→vehicle 거친 클래스 매핑, class-agnostic 매칭. miss = 검출기의 recall 실패이지, occupancy 주장이 아니다."
+    },
+    "differentiator": {
+      "label": "차별점 · H1",
+      "heading": "occupancy는 box-only가 구조적으로 못 보는 것을 본다",
+      "subhead": "데모 속 한 장면 — 경로가 막혔는데 그걸 설명할 추적 박스가 없다. box-only 언어엔 이 실패 모드를 부를 말이 없다.",
+      "bevCaptionBefore": "occupancy가 자차 in-path band를 ",
+      "bevCaptionAfter": "에서 막는데, 5 m 안에 그걸 설명할 추적 박스가 없다.",
+      "occupancy": "occupancy",
+      "boxOnly": "box-only",
+      "freeSpaceCoverage": "자유공간 쿼리 커버리지",
+      "expressivityGap": "표현력 간극",
+      "queriesSummary": "자유공간 쿼리 {queries}개 · {families}"
+    },
+    "honesty": {
+      "label": "honesty 레이어",
+      "heading": "모든 결과가 얼마나 믿을지를 말한다",
+      "subhead": "각 실패 유형은 어떤 독립 체크가 뒷받침하는지로 태그된다. 이게 차별점이다 — 출처 없이 제시되는 결과는 없다.",
+      "independentCheck": "독립 체크",
+      "consistencyOnly": "일관성 검사뿐",
+      "oraclesOnFile": "기록된 오라클",
+      "external": "외부",
+      "fpDenotation": "FP쪽 denotation",
+      "agreement": "일치 {value}",
+      "voxelRibbonFp": "· voxel-ribbon FP {value}",
+      "boxOnly": "· box-only {value}",
+      "gpuGated": "외부(BLOCKED쪽) 라벨 없는 장애물 recall은 GPU-gated — 이번 세션 solo/CPU로는 경험적으로 닫힘. 주장하지 않는다.",
+      "kind": {
+        "modelEval": "model-eval",
+        "externalFp": "external-fp",
+        "consistencyOnly": "consistency-only"
+      }
+    },
+    "catalogue": {
+      "label": "카탈로그 · 데모 범위",
+      "heading": "데모가 실제로 훑은 범위",
+      "subhead": "AV2 코퍼스의 한정된 부분집합, 정직하게 밝힘 — 전체 코퍼스 스윕이 아니다.",
+      "colSignature": "시그니처",
+      "colCandidates": "후보",
+      "colClusters": "클러스터",
+      "colLogs": "로그",
+      "colScope": "범위",
+      "scopeCell": "로그 {logs}개 · stride {stride} · 프레임 {frames}개"
+    },
+    "footer": {
+      "blurb": "Argoverse 2 센서 로그 위에서 돈다. 독립 오라클이 없는 곳에선 외부 검증된 recall을 주장하지 않는다. 기록된 외부 체크는 traversal(FP 방향) 오라클뿐. 여기선 부정 결과가 각주가 아니라 헤드라인이다.",
+      "h1Label": "H1 표현력"
+    },
+    "captionFallback": "캡션 참고"
+  },
+  "evidence": {
+    "metaTitle": "증거 — spatial-probe",
+    "metaDescription": "모든 주장, 그 판정, 그리고 어떻게 채점했나. 부정 결과 포함.",
+    "heading": "증거",
+    "countSuffix": "{count} {verdict}",
+    "intro": "모든 주장, 그 판정, 그리고 어떻게 채점했나. 부정 결과 포함 — 측정-정직성은 기능이지 각주가 아니다. H3 행은 두 번 감사하고 철회한 결과다. 묻지 않고 보여준다.",
+    "columns": {
+      "claim": "주장",
+      "axis": "축",
+      "verdict": "판정",
+      "gradedBy": "채점자"
+    }
+  },
+  "occquery": {
+    "back": "occquery",
+    "reset": "초기화",
+    "programVerdict": "H1 표현력 {h1} (오라클 없이) · H3 {h3}",
+    "renderMode": {
+      "voxel": "voxel",
+      "lidar": "LiDAR",
+      "both": "둘 다"
+    },
+    "rows": {
+      "speed": "속도",
+      "obstacles": "장애물",
+      "minFreeWidth": "min_free_width",
+      "lateralClearance": "lateral_clearance",
+      "boxDistance": "box_distance",
+      "freePathBlocked": "free_path_blocked",
+      "none": "없음"
+    },
+    "needsExport": "export 필요",
+    "legend": "box-only는 차량·보행자만, occquery는 전부 본다",
+    "ask": {
+      "title": "occquery에 묻기",
+      "soon": "예정",
+      "body": "평문으로 물어보면, occquery가 질문을 기하 predicate로 바꿔 맞는 프레임으로 점프한다.",
+      "placeholder": "질문을 입력…"
+    },
+    "controls": {
+      "show": "표시",
+      "occupancyVoxels": "Occupancy voxel",
+      "egoVehicle": "자차",
+      "heading": "헤딩",
+      "groundGrid": "지면 격자",
+      "reachableFreeSpace": "도달가능 자유공간",
+      "wireframe": "와이어프레임",
+      "statsFps": "통계 (FPS)",
+      "colorBy": "색 기준",
+      "voxel": "Voxel",
+      "size": "크기",
+      "opacity": "불투명도",
+      "camera": "카메라",
+      "comingSoon": "준비 중",
+      "soon": "예정",
+      "comingSoonTitle": "준비 중 (export 필요)"
+    },
+    "colorModes": {
+      "flat": "평면",
+      "height": "높이",
+      "forward": "전방",
+      "lateral": "측면",
+      "semantic": "의미",
+      "state": "Occ 상태"
+    },
+    "voxelShape": {
+      "cube": "정육면체",
+      "sphere": "구"
+    },
+    "projection": {
+      "perspective": "원근",
+      "orthographic": "직교"
+    },
+    "cameraPresets": {
+      "iso": "3/4",
+      "bev": "탑",
+      "front": "정면",
+      "side": "측면",
+      "rear": "후면",
+      "driver": "운전자"
+    },
+    "comingSoonGroups": {
+      "overlays": "오버레이",
+      "search": "검색",
+      "panels": "패널"
+    },
+    "comingSoonItems": {
+      "measurementTool": "측정 도구",
+      "occupancyFlowVectors": "Occupancy-flow 벡터",
+      "nlSearch": "자연어 검색",
+      "findSimilar": "유사 장면 찾기",
+      "gtVsPredicted": "GT vs 예측 diff",
+      "embeddings": "임베딩 (UMAP)",
+      "hdMap": "HD-맵 언더레이",
+      "multiSensor": "멀티센서 패널",
+      "sam2": "SAM2 어노테이션"
+    },
+    "verdictHero": {
+      "noMeasurement": "이 프레임은 측정값 없음 — occupancy predicate가 null 반환.",
+      "surfaceGap": "자차에서 {clearance} 떨어진 단단한 표면을 박스 파이프라인은 {boxDistance}로 잰다 — 어떤 박스 쿼리도 이름 붙일 수 없는 {gap} 간극.",
+      "boxCloser": "박스는 가장 가까운 객체를 {boxDistance}로 잰다; occupancy는 여기서 도달가능 여유간격 {clearance}로 읽는다.",
+      "agree": "박스와 occupancy가 측면 {boxDistance}에서 일치 — 이 프레임은 두 측정 사이 간극 없음.",
+      "why": "이유",
+      "hide": "숨기기",
+      "dossierTitle": "H1 dossier — 원문"
+    },
+    "ribbon": {
+      "title": "box − 측면 간극 (m)",
+      "clickToSeek": "클릭해 이동",
+      "nearMiss": "NM = near-miss",
+      "verdictFlip": "- - VF = 판정 뒤집힘"
+    }
+  }
+}

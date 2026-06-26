@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import type { DeltaPoint, FrameEvent } from "./events";
 
 // SVG layout constants
@@ -28,6 +29,7 @@ type Props = {
 };
 
 export function FailureRibbon({ series, events, frameIdx, onSeek, totalFrames }: Props) {
+  const t = useTranslations();
   const width = 480; // intrinsic SVG width; scales with viewBox
 
   const { minDelta, maxDelta, points, zeroY } = useMemo(() => {
@@ -86,10 +88,10 @@ export function FailureRibbon({ series, events, frameIdx, onSeek, totalFrames }:
       {/* label row */}
       <div className="mb-0.5 flex items-center justify-between px-1">
         <span className="font-mono text-[10px] tracking-wide text-white/30">
-          box − lateral gap (m)
+          {t("occquery.ribbon.title")}
         </span>
         <span className="font-mono text-[10px] text-white/20">
-          click to seek
+          {t("occquery.ribbon.clickToSeek")}
         </span>
       </div>
 
@@ -210,10 +212,10 @@ export function FailureRibbon({ series, events, frameIdx, onSeek, totalFrames }:
             className="inline-block h-0.5 w-3"
             style={{ background: "var(--data)" }}
           />
-          <span className="font-mono text-[9px] text-white/25">NM = near-miss</span>
+          <span className="font-mono text-[9px] text-white/25">{t("occquery.ribbon.nearMiss")}</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="font-mono text-[9px] text-white/25">- - VF = verdict flip</span>
+          <span className="font-mono text-[9px] text-white/25">{t("occquery.ribbon.verdictFlip")}</span>
         </div>
       </div>
     </div>

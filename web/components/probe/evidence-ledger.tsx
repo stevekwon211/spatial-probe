@@ -2,43 +2,48 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { FINDINGS, VERDICT_COUNTS, type Finding } from "@/lib/findings";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusChip } from "@/components/ui/status-chip";
 import { GlassPanel } from "@/components/occquery/glass";
 import { cn } from "@/lib/utils";
 
-const COLUMNS: Column<Finding>[] = [
-  { key: "claim", header: "claim", sortable: true, sortValue: (f) => f.claim, render: (f) => (
-    <div>
-      <div className="text-foreground">{f.claim}</div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground/70">{f.detail}</div>
-    </div>
-  ) },
-  { key: "axis", header: "axis", sortable: true, render: (f) => (
-    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">{f.axis}</span>
-  ) },
-  { key: "verdict", header: "verdict", sortable: true, sortValue: (f) => f.verdict, render: (f) => <StatusChip verdict={f.verdict} /> },
-  { key: "gradedBy", header: "graded by", render: (f) => (
-    <span className="font-mono text-[11px] text-muted-foreground/70">{f.gradedBy}</span>
-  ) },
-];
-
+// The claim/detail/axis/verdict/gradedBy/dossier text is verbatim research content from
+// experiments/*/results/summary.md (a primary source), so it stays as data — only the page
+// chrome (headings, column labels, intro) is translated.
 export function EvidenceLedger() {
+  const t = useTranslations();
   const [open, setOpen] = useState<Finding | null>(null);
+
+  const COLUMNS: Column<Finding>[] = [
+    { key: "claim", header: t("evidence.columns.claim"), sortable: true, sortValue: (f) => f.claim, render: (f) => (
+      <div>
+        <div className="text-foreground">{f.claim}</div>
+        <div className="mt-0.5 text-[11px] text-muted-foreground/70">{f.detail}</div>
+      </div>
+    ) },
+    { key: "axis", header: t("evidence.columns.axis"), sortable: true, render: (f) => (
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">{f.axis}</span>
+    ) },
+    { key: "verdict", header: t("evidence.columns.verdict"), sortable: true, sortValue: (f) => f.verdict, render: (f) => <StatusChip verdict={f.verdict} /> },
+    { key: "gradedBy", header: t("evidence.columns.gradedBy"), render: (f) => (
+      <span className="font-mono text-[11px] text-muted-foreground/70">{f.gradedBy}</span>
+    ) },
+  ];
+
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-10 text-foreground">
       <header className="mb-1 flex items-baseline justify-between gap-4">
-        <h1 className="text-lg font-medium tracking-tight">Evidence</h1>
+        <h1 className="text-lg font-medium tracking-tight">{t("evidence.heading")}</h1>
         <div className="flex gap-3 font-mono text-[11px] text-muted-foreground/70 tabular-nums">
           {(Object.entries(VERDICT_COUNTS) as [string, number][])
             .filter(([, n]) => n > 0)
-            .map(([v, n]) => <span key={v}>{n} {v.toLowerCase()}</span>)}
+            .map(([v, n]) => <span key={v}>{t("evidence.countSuffix", { count: n, verdict: v.toLowerCase() })}</span>)}
         </div>
       </header>
       <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
-        Every claim, its verdict, and how it was graded. Negatives included — measurement-honesty is a
-        feature, not a footnote. The H3 row is a result we audited twice and retracted; it is shown, not buried.
+        {t("evidence.intro")}
       </p>
 
       <GlassPanel className="overflow-hidden">

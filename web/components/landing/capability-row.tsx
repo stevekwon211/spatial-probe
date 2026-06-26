@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { ModuleItem } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +9,9 @@ const lifecycle = (s: string) => (s === "in-progress" ? "live" : s === "done" ? 
 // One row of the capability index — our single 3-layer/showcase section (kde SelectedWork pattern).
 // Earns prominence through EXTRA LAYERS (index numeral · axis meta · status · live/planned dimming),
 // not a bigger headline. Achromatic only: no teal anywhere (a row is chrome, not a measurement).
+// Display strings resolve from messages by the stable module id; pipeline.ts holds ids/status only.
 export function CapabilityRow({ module: m, index }: { module: ModuleItem; index: number }) {
+  const t = useTranslations();
   const live = m.status !== "planned";
   const inner = (
     <div
@@ -18,13 +21,13 @@ export function CapabilityRow({ module: m, index }: { module: ModuleItem; index:
       <span className="metric" style={{ fontSize: "var(--fs-body-sm)", color: "var(--faint)" }}>{String(index + 1).padStart(2, "0")}</span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className={cn("font-medium", m.href && "ink-link")} style={{ fontSize: "var(--fs-subtitle)", color: "var(--text)" }}>{m.title}</span>
-          <span className="font-mono uppercase" style={{ fontSize: "var(--fs-mono-sm)", letterSpacing: "var(--ls-label)", color: "var(--dim)" }}>{m.axis}</span>
+          <span className={cn("font-medium", m.href && "ink-link")} style={{ fontSize: "var(--fs-subtitle)", color: "var(--text)" }}>{t(`pipeline.modules.${m.i18nKey}.title`)}</span>
+          <span className="font-mono uppercase" style={{ fontSize: "var(--fs-mono-sm)", letterSpacing: "var(--ls-label)", color: "var(--dim)" }}>{t(`pipeline.modules.${m.i18nKey}.axis`)}</span>
         </div>
-        <p className="mt-1.5" style={{ fontSize: "var(--fs-prose-sm)", lineHeight: "var(--lh-prose)", color: "var(--muted)", maxWidth: "var(--measure)" }}>{m.oneLine}</p>
+        <p className="mt-1.5" style={{ fontSize: "var(--fs-prose-sm)", lineHeight: "var(--lh-prose)", color: "var(--muted)", maxWidth: "var(--measure)" }}>{t(`pipeline.modules.${m.i18nKey}.oneLine`)}</p>
       </div>
       <div className="flex items-center gap-3 whitespace-nowrap">
-        <span className="font-mono uppercase" style={{ fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--ls-label)", color: live ? "var(--faint)" : "var(--dim)" }}>{lifecycle(m.status)}</span>
+        <span className="font-mono uppercase" style={{ fontSize: "var(--fs-mono-xs)", letterSpacing: "var(--ls-label)", color: live ? "var(--faint)" : "var(--dim)" }}>{t(`capabilityRow.${lifecycle(m.status)}`)}</span>
         {m.href ? <ArrowUpRight className="size-3.5" style={{ color: "var(--faint)" }} /> : <Plus className="size-3" style={{ color: "var(--dim)" }} />}
       </div>
     </div>
