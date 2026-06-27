@@ -49,6 +49,34 @@ Sealed run command (from `oracle_stereo_recall_preregistration.md`):
     --z-min 2.0 --z-max 30.0 --n-stereo-min 8 --lr-consistency-px 1.0 \
     --edge-discontinuity-m 1.5 --null band-local --shuffles 1000 --seed 0 \
     --out experiments/occquery_v0/results/oracle_stereo_recall.json
+
+DISPARITY SOURCE (sealed in `oracle_stereo_recall_learned_preregistration.md`, git 1c8b357) -- the
+ONLY thing that may change vs the classical run is the DEPTH FRONT-END (the matcher). `--disparity-
+source census` (DEFAULT) keeps the sealed numpy census/SAD path byte-for-byte. `--disparity-source
+artifact --disparity-artifact-dir DIR` swaps ONLY the disparity at the 4 census call sites for a
+pre-computed learned-stereo (IGEV) artifact; EVERYTHING downstream (Z=fx*B/d, band, FOV, voxelize
+filters, lr-consistency 1.0px, edge 1.5m, n_stereo_min, band-local null, AUC gate, bootstrap, kill)
+is inherited unchanged. torch/IGEV NEVER run here -- they run on an external GPU pod
+(`igev_disparity_pod.py`) that emits the artifacts; this module stays pure numpy/scipy/Pillow/pyarrow.
+
+ARTIFACT CONTRACT (the drop-in seam; pod writer + `get_disparity` reader share `artifact_name`):
+  filename:  `<DIR>/disp_<log>_<cam_ts>_<side>.npz`  where
+             - `<log>`    = the full AV2 log UUID (e.g. 201fe83b-7dd7-38f4-9d26-7b4a668638a9),
+             - `<cam_ts>` = the FULL-nanosecond camera-frame timestamp == the key the oracle already
+                            uses to find the stereo frame, i.e. `_nearest(_cam_timestamps(log_dir,
+                            "stereo_front_{left|right}"), reference_ts)` (the same jpg stem it opens;
+                            NOT a new key, NOT a truncation),
+             - `<side>`   = "L" (left-image disparity, drop-in for `compute_disparity`) or
+                            "R" (right-image disparity, drop-in for `compute_disparity_right`).
+  npz keys:  `disp` -- REQUIRED. float32, shape == the census `undL_s`/`undR_s` grid (the UNDISTORTED,
+             2x-downsampled LEFT grid for side "L"; the undistorted 2x-downsampled RIGHT grid for side
+             "R"). Disparity is in DOWNSAMPLED pixels with the census sign convention: positive =
+             nearer, so the right-image feature matching left pixel (v,u) sits at (v, u-disp).
+             NaN marks invalid/unmatched pixels (IGEV finite-mask + any out-of-frame after warp-back).
+             So Z = camL_s.fx * B / disp reproduces the census metric depth exactly, and the inherited
+             local `lr_consistency` (1.0px, byte-for-byte) is the single LR-consistency filter, run on
+             the IGEV disparities exactly as it ran on census ones. Any extra keys are IGNORED (NaN in
+             `disp` already encodes all invalidity the downstream needs).
 """
 from __future__ import annotations
 
@@ -443,6 +471,67 @@ def compute_disparity_right(grayL: np.ndarray, grayR: np.ndarray, d_min: int, d_
 
 
 # ----------------------------------------------------------------------------------------------
+# Disparity SOURCE seam -- census (sealed numpy matcher, DEFAULT) or pre-computed learned artifact.
+# This is the ONLY change vs the classical run (pre-reg: the single variable = the depth front-end).
+# Everything downstream of `get_disparity` is inherited byte-for-byte.
+# ----------------------------------------------------------------------------------------------
+def artifact_name(log: str, cam_ts: int, side: str) -> str:
+    """Single source of truth for the disparity-artifact filename (pod writer + oracle reader share
+    this so the seam can never drift). `cam_ts` is the FULL-nanosecond camera-frame timestamp the
+    oracle already resolves via `_nearest(_cam_timestamps(...), reference_ts)` -- the same jpg stem it
+    opens to read the stereo frame (see the ARTIFACT CONTRACT in the module docstring)."""
+    if side not in ("L", "R"):
+        raise ValueError(f"side must be 'L' or 'R', got {side!r}")
+    return f"disp_{log}_{int(cam_ts)}_{side}.npz"
+
+
+def _load_disparity_artifact(artifact_dir: pathlib.Path, log: str, cam_ts: int, side: str,
+                             expected_shape: tuple[int, int]) -> np.ndarray:
+    """Load `disp` (float32 HxW, NaN=invalid) from `<artifact_dir>/disp_<log>_<cam_ts>_<side>.npz` and
+    return it as a float disparity on EXACTLY the census `undL_s`/`undR_s` grid. Asserts shape match so
+    a mis-geometried artifact fails loudly instead of silently mis-grading."""
+    path = pathlib.Path(artifact_dir) / artifact_name(log, cam_ts, side)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"disparity artifact missing: {path} (--disparity-source artifact expects the pod to have "
+            f"emitted one .npz per (log, camera-frame, side); see igev_disparity_pod.py)")
+    with np.load(path) as npz:
+        if "disp" not in npz.files:
+            raise KeyError(f"artifact {path} has no 'disp' key (found {npz.files}); see ARTIFACT CONTRACT")
+        disp = np.asarray(npz["disp"], dtype=float)
+    if disp.shape != tuple(expected_shape):
+        raise ValueError(
+            f"artifact {path} disp shape {disp.shape} != census-grid shape {tuple(expected_shape)} -- "
+            f"the artifact must be on the UNDISTORTED 2x-downsampled grid (undL_s for L / undR_s for R)")
+    return disp
+
+
+def get_disparity(grayL_s: np.ndarray, grayR_s: np.ndarray, d_min: int, d_max: int, *,
+                  log: str, ts: int, side: str, cfg: "Config") -> np.ndarray:
+    """The disparity seam. `side="L"` returns the left-image disparity (drop-in for
+    `compute_disparity(...)[0]`); `side="R"` returns the right-image disparity (drop-in for
+    `compute_disparity_right(...)`). `ts` is the camera-frame timestamp the oracle resolved for THIS
+    side (cl for L, cr for R) -- the same key it used to open the jpg.
+
+    source == "census" (DEFAULT): runs the sealed numpy matcher, byte-for-byte unchanged.
+    source == "artifact": loads the pre-computed learned-stereo (IGEV) disparity, validated onto the
+                          exact census grid so ALL downstream filters run unchanged. NO torch here."""
+    if cfg.disparity_source == "census":
+        if side == "L":
+            disp, _, _ = compute_disparity(grayL_s, grayR_s, d_min, d_max)
+            return disp
+        if side == "R":
+            return compute_disparity_right(grayL_s, grayR_s, d_min, d_max)
+        raise ValueError(f"side must be 'L' or 'R', got {side!r}")
+    if cfg.disparity_source == "artifact":
+        if cfg.disparity_artifact_dir is None:
+            raise ValueError("--disparity-source artifact requires --disparity-artifact-dir DIR")
+        expected_shape = grayL_s.shape if side == "L" else grayR_s.shape
+        return _load_disparity_artifact(cfg.disparity_artifact_dir, log, ts, side, expected_shape)
+    raise ValueError(f"unknown disparity_source {cfg.disparity_source!r} (expected census|artifact)")
+
+
+# ----------------------------------------------------------------------------------------------
 # Back-projection: undistorted (u,v,Z) in the LEFT camera -> ego frame.
 # ----------------------------------------------------------------------------------------------
 def backproject_to_ego(u: np.ndarray, v: np.ndarray, Z: np.ndarray, cam: AV2Camera) -> np.ndarray:
@@ -631,9 +720,14 @@ def occupancy_bev(grid, z_max: float) -> np.ndarray:
 
 def compute_frame(log: str, ts: int, grayL_raw: np.ndarray, grayR_raw: np.ndarray,
                   camL_full: AV2Camera, camR_full: AV2Camera, B: float, grid,
-                  cfg: "Config") -> FrameResult:
-    """Full per-frame pipeline: undistort -> downsample -> block-match -> LR/uniqueness ->
-    Z + back-project -> filters -> voxelize -> band∩FOV -> miss events."""
+                  cfg: "Config", ts_left: int | None = None,
+                  ts_right: int | None = None) -> FrameResult:
+    """Full per-frame pipeline: undistort -> downsample -> disparity (census or artifact) ->
+    LR/uniqueness -> Z + back-project -> filters -> voxelize -> band∩FOV -> miss events.
+
+    `ts_left`/`ts_right` are the resolved camera-frame timestamps for L/R (the jpg stems the caller
+    already opened); they key the disparity artifact in --disparity-source artifact mode and are unused
+    by the census path."""
     ds = cfg.downsample
     # (a) undistort both raw images to pinhole frames
     mapuL, mapvL = build_undistort_map(camL_full)
@@ -660,9 +754,9 @@ def compute_frame(log: str, ts: int, grayL_raw: np.ndarray, grayR_raw: np.ndarra
     camL_s = camL_full.scaled(ds)
     d_min = max(1, int(math.floor(cfg.d_min_px / ds)))
     d_max = int(math.ceil(cfg.d_max_px / ds))
-    # (b) block-matching disparity (vectorized cost volume) + sub-pixel + uniqueness
-    dispL, _, _ = compute_disparity(undL_s, undR_s, d_min, d_max)
-    dispR = compute_disparity_right(undL_s, undR_s, d_min, d_max)
+    # (b) disparity from the configured source (census matcher, or pre-computed learned artifact)
+    dispL = get_disparity(undL_s, undR_s, d_min, d_max, log=log, ts=ts_left, side="L", cfg=cfg)
+    dispR = get_disparity(undL_s, undR_s, d_min, d_max, log=log, ts=ts_right, side="R", cfg=cfg)
     dispL = lr_consistency(dispL, dispR, cfg.lr_consistency_px / ds)  # tol scales with image scale
     # (e-texture) texture gate: only pixels whose local left-image gradient exceeds tau_tex match.
     if cfg.tau_tex is not None:
@@ -814,6 +908,11 @@ class Config:
     tau_tex: float | None = None
     d_min_px: int = 28   # pre-reg: Z in [2,30] <-> d in [28,421] at fx~1686.6, B~0.499
     d_max_px: int = 421
+    # depth front-end SOURCE (the single variable; pre-reg oracle_stereo_recall_learned). census =
+    # the sealed numpy matcher (DEFAULT, byte-for-byte). artifact = pre-computed learned-stereo (IGEV)
+    # disparity loaded from disparity_artifact_dir (NO torch here).
+    disparity_source: str = "census"
+    disparity_artifact_dir: pathlib.Path | None = None
 
 
 # ----------------------------------------------------------------------------------------------
@@ -1063,8 +1162,8 @@ def run_calibration_auc(logs: list[str], data_root: pathlib.Path, cfg: Config,
             undR = remap_gray(grayR, mapuR, mapvR)
             undL_s = undL[::ds, ::ds] if ds > 1 else undL
             undR_s = undR[::ds, ::ds] if ds > 1 else undR
-            dispL, _, _ = compute_disparity(undL_s, undR_s, d_min, d_max)
-            dispR = compute_disparity_right(undL_s, undR_s, d_min, d_max)
+            dispL = get_disparity(undL_s, undR_s, d_min, d_max, log=log, ts=cam_ts, side="L", cfg=cfg)
+            dispR = get_disparity(undL_s, undR_s, d_min, d_max, log=log, ts=cr, side="R", cfg=cfg)
             dispL = lr_consistency(dispL, dispR, cfg.lr_consistency_px / ds)
             if cfg.tau_tex is not None:
                 grad = _patch_evidence_field(undL_s, half=12 // cfg.downsample + 1)
@@ -1111,8 +1210,13 @@ def run_confirmatory(logs: list[str], held_log: str, cfg: Config, data_root: pat
         out_path.write_text(json.dumps(report, indent=2) + "\n")
         return report
 
-    # tau_tex on the held-out log (fixed before result-log miss-rates)
-    cfg.tau_tex = fit_tau_tex(held_log, data_root, cfg)
+    # tau_tex on the held-out log (fixed before result-log miss-rates). The census texture-gate exists
+    # ONLY because census is unreliable on low texture; the learned-stereo pre-reg (item #3) DROPS it
+    # for the artifact source (replaced by IGEV's own validity = the inherited lr-consistency 1.0px +
+    # the artifact's NaN finite-mask). So fit/apply it for census only; artifact mode leaves tau_tex
+    # None and all `if cfg.tau_tex is not None` gates skip.
+    if cfg.disparity_source == "census":
+        cfg.tau_tex = fit_tau_tex(held_log, data_root, cfg)
 
     headline_logs = [lg for lg in logs if lg != held_log]
     rows: list[dict] = []          # confirmatory (headline) frames
@@ -1205,10 +1309,12 @@ def _run_log(log: str, cfg: Config, data_root: pathlib.Path, rng: np.random.Gene
         cr = _nearest(camR_ts, ts)
         grayL = _gray_from_jpg(log_dir / "sensors" / "cameras" / "stereo_front_left" / f"{cl}.jpg")
         grayR = _gray_from_jpg(log_dir / "sensors" / "cameras" / "stereo_front_right" / f"{cr}.jpg")
-        fr = compute_frame(log, ts, grayL, grayR, camL_full, camR_full, B, grid, cfg)
+        fr = compute_frame(log, ts, grayL, grayR, camL_full, camR_full, B, grid, cfg,
+                           ts_left=cl, ts_right=cr)
         # band-local null: recompute struct_in_band + occ count to shuffle
         if not fr.calib_reject and fr.n_struct > 0:
-            shuf_rates = _frame_shuffles(log, ts, grayL, grayR, camL_full, camR_full, B, grid, cfg, bf, rng)
+            shuf_rates = _frame_shuffles(log, ts, grayL, grayR, camL_full, camR_full, B, grid, cfg, bf, rng,
+                                         ts_left=cl, ts_right=cr)
             fr.shuf_rate = float(np.mean(shuf_rates)) if shuf_rates else float("nan")
         else:
             fr.shuf_rate = float("nan")
@@ -1216,17 +1322,20 @@ def _run_log(log: str, cfg: Config, data_root: pathlib.Path, rng: np.random.Gene
     return out
 
 
-def _frame_shuffles(log, ts, grayL, grayR, camL_full, camR_full, B, grid, cfg, bf, rng) -> list[float]:
+def _frame_shuffles(log, ts, grayL, grayR, camL_full, camR_full, B, grid, cfg, bf, rng,
+                    ts_left=None, ts_right=None) -> list[float]:
     """Recompute the per-frame struct_in_band + occupied-in-band count, then run `cfg.shuffles`
     band-local relocations. Returns the list of shuffled miss-rates."""
     # recompute struct_in_band (mirror of compute_frame, returning the masks we need)
-    si_band, occ_in_band = _frame_masks(grayL, grayR, camL_full, camR_full, B, grid, cfg, bf)
+    si_band, occ_in_band = _frame_masks(grayL, grayR, camL_full, camR_full, B, grid, cfg, bf,
+                                        log=log, ts_left=ts_left, ts_right=ts_right)
     if si_band is None:
         return []
     return [band_local_shuffle_rate(si_band, occ_in_band, bf, rng) for _ in range(cfg.shuffles)]
 
 
-def _frame_masks(grayL, grayR, camL_full, camR_full, B, grid, cfg, bf):
+def _frame_masks(grayL, grayR, camL_full, camR_full, B, grid, cfg, bf, *,
+                 log=None, ts_left=None, ts_right=None):
     """Return (struct_in_band (NX,NY) bool, occupied-in-band count) for the band-local null. Mirrors
     compute_frame's structure computation so the null acts on the SAME stereo structure map."""
     ds = cfg.downsample
@@ -1241,8 +1350,8 @@ def _frame_masks(grayL, grayR, camL_full, camR_full, B, grid, cfg, bf):
     camL_s = camL_full.scaled(ds)
     d_min = max(1, int(math.floor(cfg.d_min_px / ds)))
     d_max = int(math.ceil(cfg.d_max_px / ds))
-    dispL, _, _ = compute_disparity(undL_s, undR_s, d_min, d_max)
-    dispR = compute_disparity_right(undL_s, undR_s, d_min, d_max)
+    dispL = get_disparity(undL_s, undR_s, d_min, d_max, log=log, ts=ts_left, side="L", cfg=cfg)
+    dispR = get_disparity(undL_s, undR_s, d_min, d_max, log=log, ts=ts_right, side="R", cfg=cfg)
     dispL = lr_consistency(dispL, dispR, cfg.lr_consistency_px / ds)
     if cfg.tau_tex is not None:
         grad = _patch_evidence_field(undL_s, half=12 // cfg.downsample + 1)
@@ -1283,6 +1392,11 @@ def _build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--downsample", type=int, default=_DOWNSAMPLE,
                     help="block-matching image downsample factor (geometry-invariant; SPEC-NOTE in source)")
+    ap.add_argument("--disparity-source", default="census", choices=["census", "artifact"],
+                    help="depth front-end: census (sealed numpy matcher, DEFAULT) or artifact "
+                         "(pre-computed learned-stereo IGEV disparity .npz; the single pre-reg variable)")
+    ap.add_argument("--disparity-artifact-dir", type=pathlib.Path, default=None,
+                    help="dir of disp_<log>_<cam_ts>_<side>.npz artifacts (required for --disparity-source artifact)")
     ap.add_argument("--out", type=pathlib.Path,
                     default=_HERE / "results" / "oracle_stereo_recall.json")
     ap.add_argument("--data-root", type=pathlib.Path, default=_AV2)
@@ -1305,7 +1419,10 @@ def main(argv: list[str] | None = None) -> None:
         z_min=args.z_min, z_max=args.z_max, n_stereo_min=args.n_stereo_min,
         lr_consistency_px=args.lr_consistency_px, edge_discontinuity_m=args.edge_discontinuity_m,
         null=args.null, shuffles=args.shuffles, seed=args.seed, downsample=args.downsample,
+        disparity_source=args.disparity_source, disparity_artifact_dir=args.disparity_artifact_dir,
     )
+    if cfg.disparity_source == "artifact" and cfg.disparity_artifact_dir is None:
+        raise SystemExit("--disparity-source artifact requires --disparity-artifact-dir DIR")
 
     if args.self_check:
         print("STEREO RECALL ORACLE -- geometry self-check (real feathers, no confirmatory data):")
