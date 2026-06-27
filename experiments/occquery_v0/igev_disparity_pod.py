@@ -123,6 +123,7 @@ def _load_igev(igev_repo: str, checkpoint: str):  # pragma: no cover - pod only
         hidden_dims=[128, 128, 128], corr_implementation="reg", shared_backbone=False,
         corr_levels=2, corr_radius=4, n_downsample=2, slow_fast_gru=False,
         n_gru_layers=3, max_disp=192, mixed_precision=True, valid_iters=32,
+        precision_dtype="float16",  # newer gangweiX/IGEV-Stereo reads args.precision_dtype in forward()
     )
     model = torch.nn.DataParallel(IGEVStereo(args))
     # sceneflow.pth is a plain state_dict (tensors only), so weights_only=True is safe AND avoids the
