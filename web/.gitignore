@@ -3,5 +3,5 @@
 /node_modules
 # 381MB occquery 3D-viewer scene data — never commit (degrades gracefully on Vercel)
 /public/data/occquery
-# The small PRISM demo frame images ARE committed (CDN static, ~744KB, referenced as /data/frames/*)
+# The small Aletheon demo frame images ARE committed (CDN static, ~744KB, referenced as /data/frames/*)
 *.tsbuildinfo

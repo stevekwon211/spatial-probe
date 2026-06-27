@@ -6,7 +6,7 @@
   },
   "nav": {
     "pipeline": "Pipeline",
-    "prism": "PRISM",
+    "aletheon": "Aletheon",
     "evidence": "Evidence",
     "openExplorer": "Open Explorer"
   },
@@ -145,11 +145,11 @@
     "shipped": "shipped",
     "planned": "planned"
   },
-  "prism": {
-    "metaTitle": "PRISM — find the scenes where the model is wrong",
+  "aletheon": {
+    "metaTitle": "Aletheon — find the scenes where the model is wrong",
     "metaDescription": "An open spatial-failure-search engine whose answers carry a label-free correctness check. Find the frames that break a perception model, in a few lines.",
     "hero": {
-      "eyebrow": "PRISM",
+      "eyebrow": "Aletheon",
       "title": "Find the scenes where the model is wrong, in a few lines.",
       "lead": "An open spatial-failure-search engine whose answers carry a label-free correctness check. You query for a failure mode; every hit comes back tagged with which independent check backs it, and how far to trust it.",
       "seeFailures": "See the failures",

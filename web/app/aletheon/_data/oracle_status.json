@@ -1,0 +1,26 @@
+{
+  "note": "The three oracles that gate Aletheon's failure claims. Honest: only the traversal (FP-direction) oracle is externally anchored; box-recall is same-modality consistency; depth is INVALID on this substrate (reported as a negative, not hidden).",
+  "oracles": [
+    {
+      "name": "traversal (occupancy FP on the driven path)",
+      "verdict": "RELIABLE",
+      "anchors": "path_blocked_no_box (external-fp)",
+      "headline": "true FP 0.000 vs shuffled 0.036 (n=1177 frames, 8 held-out free-driving logs); RELIABLE = true CI below shuffled CI. Occupancy does NOT hallucinate obstacles on space the ego physically drove through.",
+      "external": true
+    },
+    {
+      "name": "box-recall (LiDAR-seen boxes occupancy marks FREE)",
+      "verdict": "RECALL-SUPPORTED",
+      "anchors": "box_in_free (consistency-only)",
+      "headline": "true miss 0.506 vs size/range-matched null 0.733 (n_interior>=5, 27 logs). RECALL-SUPPORTED but SAME-MODALITY (gates on the same LiDAR the voxelizer reads) -> internal consistency, NOT external truth; absolute count inflated by the _ROAD_Z floor-straddle confound.",
+      "external": false
+    },
+    {
+      "name": "depth-recall (frozen DAv2 metric depth as an independent recall route)",
+      "verdict": "INVALID-SCALE",
+      "anchors": "would-have externally anchored box recall -- CLOSED",
+      "headline": "DAv2 median |depth - box_range| = 9.838 m > 0.5 m in the 2-30 m band -> metric scale invalid on AV2; no miss-rate reported. The externally-independent recall route is honestly CLOSED on this substrate (also: classical stereo AUC 0.259). Reported as a NEGATIVE, not buried.",
+      "external": false
+    }
+  ]
+}

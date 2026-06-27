@@ -39,7 +39,7 @@
 ## 2. Value-of-Correction — occluded label 고치면 metric 얼마나 움직이나 (occlusion line)
 
 - **가설.** occlusion-conditioned value-of-correction estimator가 "occluded label을 고치면 occluded-slice metric을 가장 많이 올리는 scene"을 LMD/uncertainty/ActiveAD/random보다 잘 랭크한다.
-- **핵심 아이디어.** PRISM headline moat("뭐가 mislabeled + 그게 모델 성능에 어떻게 영향")를 scoring function 하나로. Shah et al.(2310.02533)의 slice-targeted value-of-correction을 occupancy/occlusion/AV로 처음 instantiate(이건 인용 필수, 내 건 3D/AV instantiation + benchmark).
+- **핵심 아이디어.** Aletheon headline moat("뭐가 mislabeled + 그게 모델 성능에 어떻게 영향")를 scoring function 하나로. Shah et al.(2310.02533)의 slice-targeted value-of-correction을 occupancy/occlusion/AV로 처음 instantiate(이건 인용 필수, 내 건 3D/AV instantiation + benchmark).
 - **측정 기준.** top-K 교정 → retrain → **occluded-slice Δ-mIoU / Δ-RayIoU**(headline) · predicted value ↔ realized gain **Spearman rank-corr** · gain-per-review-minute. fairness: content-sufficient control slice의 gain이 occlusion 신호로 설명되면 안 됨.
 - **데이터/접근.** Occ3D-nuScenes + native nuScenes visibility token + CARLA/UniOcc. **단 correct→retrain→measure 루프가 multi-GPU-day라 조합 폭발.** de-risk 필수: predicted value는 proxy/1-run attribution(TracIn/Data-Shapley-in-one-run), causal 검증은 small proxy occupancy 모델 + 주입한 known-GT corruption subset. △ 예산 필요.
 
@@ -53,7 +53,7 @@
 ## 4. OccQuery — occupancy-native physical-predicate retrieval (geometry/occupancy 축, non-occ 1순위)
 
 - **가설.** clearance / free-corridor / reachable-region 같은 deterministic geometric predicate를 dense occupancy field 위에서 실행하면, box-only 언어(RefAV 28함수)가 *표현조차 못 하는* planning-critical scene을 retrieve할 수 있고, occupancy oracle 대비 denotation-correct하게 유지된다.
-- **핵심 아이디어.** physical-predicate retrieval을 object cuboid에서 떼어내 voxel/occupancy 위로. (Scenic이 visibility predicate는 선점 → 거긴 demote, **clearance/free-space로 리드.**) PRISM의 "physical-quantity로 직접 측정하는 reproducible search"를 그들이 *이미 만드는* occupancy asset 위에서 확장.
+- **핵심 아이디어.** physical-predicate retrieval을 object cuboid에서 떼어내 voxel/occupancy 위로. (Scenic이 visibility predicate는 선점 → 거긴 demote, **clearance/free-space로 리드.**) Aletheon의 "physical-quantity로 직접 측정하는 reproducible search"를 그들이 *이미 만드는* occupancy asset 위에서 확장.
 - **측정 기준.** denotation accuracy(occupancy oracle 대비 precision/recall/**F1**) · 연속값(clearance)의 **Tolerance-based Accuracy**([75%,125%] of GT) + MAE · **query-expressibility coverage**(occupancy로 답 가능 vs cuboid로 표현 불가 개수) · predicted-occupancy noise → retrieval 붕괴 곡선.
 - **데이터/접근.** Occ3D-nuScenes/Waymo + SSCBench(occupancy GT) + Argoverse2 LiDAR/HD-map(독립 free-space/clearance GT); RefAV cuboid predicate = expressivity-gap baseline. **GT-occupancy면 eval만, single GPU. ✓ + 내 voxel engine이 곧 predicate executor.**
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "spatial-probe"
 version = "0.0.0"
-description = "PRISM: find the scenes where a spatial model is wrong, with a label-free correctness check. Sensor-agnostic Scene IR + safe query language + physical predicates + failure-mining, local, no infra."
+description = "Aletheon: find the scenes where a spatial model is wrong, with a label-free correctness check. Sensor-agnostic Scene IR + safe query language + physical predicates + failure-mining, local, no infra."
 authors = [{ name = "Doeon Kwon" }]
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -25,22 +25,22 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Image Recognition",
 ]
-# CORE: pure numpy/scipy/pyarrow/pyyaml — no torch, no onnxruntime. Installs the `prism` engine.
+# CORE: pure numpy/scipy/pyarrow/pyyaml — no torch, no onnxruntime. Installs the `aletheon` engine.
 dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",  # ndimage: C-space reachable_free_field (predicates/reachable.py)
     "pyyaml>=6.0",
-    "pyarrow>=14",  # prism: lossless Scene IR (de)serialization + av2 calibration feathers
+    "pyarrow>=14",  # aletheon: lossless Scene IR (de)serialization + av2 calibration feathers
 ]
 
 [project.scripts]
-prism = "prism.cli:main"
+aletheon = "aletheon.cli:main"
 
 [project.optional-dependencies]
 # OPTIONAL EXTRAS — each is lazy-imported; the core engine works without any of them.
-rerun = ["rerun-sdk>=0.20"]          # `prism view`: Rerun visualization adapter (lazy import)
+rerun = ["rerun-sdk>=0.20"]          # `aletheon view`: Rerun visualization adapter (lazy import)
 mcap = ["mcap>=1.0"]                 # MCAP log container adapter (lazy import)
-detect = ["onnxruntime>=1.16", "pillow>=10.0"]  # `prism find "... missed by the model"`: 2D-detector (YOLOv8n ONNX) model-eval, lazy import
+detect = ["onnxruntime>=1.16", "pillow>=10.0"]  # `aletheon find "... missed by the model"`: 2D-detector (YOLOv8n ONNX) model-eval, lazy import
 # user-facing optional capabilities together (view + mcap + model-eval find). NOT torch/onnxruntime-in-core.
 all = ["rerun-sdk>=0.20", "mcap>=1.0", "onnxruntime>=1.16", "pillow>=10.0"]
 # research/build-only, deliberately NOT in [all]:
@@ -50,7 +50,7 @@ mcp = ["mcp>=1.2"]                    # mcp_server/: expose the probe as LLM-cal
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["probe*", "prism*"]
+include = ["probe*", "aletheon*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

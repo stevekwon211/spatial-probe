@@ -9,8 +9,8 @@ file path is absolute. arXiv ids and confidence are marked inline.
 
 ## CORRECTION (2026-06-25) — primary evidence supersedes the L6 "box-centric" finding
 
-A screenshot of the **live Visionary PRISM viewer** (shared by Doeon) is PRIMARY evidence that overrides
-the secondary-source L6 verdict. PRISM **does render semantic occupancy** (voxels colored by class —
+A screenshot of the **live Visionary Aletheon viewer** (shared by Doeon) is PRIMARY evidence that overrides
+the secondary-source L6 verdict. Aletheon **does render semantic occupancy** (voxels colored by class —
 road / car / person / wall / vegetation / …) across **9 datasets** (waymo, nuscenes, av2, pandaset, once,
 lyft, truckscenes, nvidia, etri; ~20 scenes each), with synchronized surround **cameras** (CAM_FRONT /
 FRONT_LEFT / FRONT_RIGHT / SIDE_LEFT / SIDE_RIGHT) and a Class / Track-ID **box** overlay + a Map layer.
@@ -18,7 +18,7 @@ So "Visionary is box-centric / has no occupancy" (L6) is **WRONG** — it was in
 public marketing site, not the product. Occupancy + multi-dataset adapters (their IROS cross-platform
 strength, made real) are **present and commodity**.
 
-**This sharpens the pitch, it does not kill it.** PRISM **visualizes** occupancy but shows **no
+**This sharpens the pitch, it does not kill it.** Aletheon **visualizes** occupancy but shows **no
 free-space QUERY** (the left panel is a scene-name filter; search is box class / track, not "find scenes
 where free corridor < 1 m"). So the gap MOVES: not "they lack occupancy" but **"they cannot QUERY
 free-space over the occupancy they already render, nor verify the answer is correct."** That is exactly
@@ -239,7 +239,7 @@ Safe to state verbatim in the meeting:
 - Don't cite the 2nd-4th attributions: one internal cross-report labeling quirk exists among those
   teams (arXiv:2601.08174 self-labels 3rd-place with scores matching the runner-up / 4th). It does
   **not** touch the champion row; the 58.54 champion fact is clean.
-- **Visionary / PRISM product framing (E1 + L6, both HOLD, high):** public materials describe PRISM as
+- **Visionary / Aletheon product framing (E1 + L6, both HOLD, high):** public materials describe Aletheon as
   an AD **dataset-construction / scene-curation + labeling** pipeline (LiDAR + camera → training
   datasets, human-in-the-loop "data flywheel"); **zero** occurrence of occupancy / free-space /
   drivable-area across EN + KR sources. The "the denotation-gap pitch applies to them" point is
@@ -386,4 +386,4 @@ transitive-closure analogy — or the meeting can puncture it with facts this do
 - `github.com/CainanD/RefAV` (`main`) — `refAV/atomic_functions.py` fetched to `/tmp` (32 defs, 0 free-space primitives), re-verified independently by I2, L1, L2, L3, L5.
 - `github.com/robosense2025/track5`, `robosense2025.github.io/track5` — Track 5 = Cross-Platform 3D Object Detection; PV-RCNN + ST3D baseline; AP@0.50 R40.
 - `huggingface.co/datasets/Pi3DET/data` — Pi3DET dataset underlying Track 5 (3D detection boxes).
-- **Visionary / PRISM (L6):** `visionary.run` (company site); VentureSquare EN `venturesquare.net/en/1081959/` + KR `venturesquare.net/1081950/`; WOWTALE `en.wowtale.net/2026/05/13/234060/`; kspost `kspost.biz/en-us/articles/2525`; Platum `platum.kr/archives/286764` — PRISM = AD dataset-construction / scene-curation + labeling; **zero** occupancy / free-space terms across EN + KR.
+- **Visionary / Aletheon (L6):** `visionary.run` (company site); VentureSquare EN `venturesquare.net/en/1081959/` + KR `venturesquare.net/1081950/`; WOWTALE `en.wowtale.net/2026/05/13/234060/`; kspost `kspost.biz/en-us/articles/2525`; Platum `platum.kr/archives/286764` — Aletheon = AD dataset-construction / scene-curation + labeling; **zero** occupancy / free-space terms across EN + KR.

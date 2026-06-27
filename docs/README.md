@@ -35,6 +35,6 @@ two places. When two docs disagree, the conflict rules below settle it.
 
 - `web/` — build-in-public presentation, not the science.
 - `experiments/<exp>/results/*` except a hand-written `summary.md` — regenerable output.
-- `~/Desktop/*.md` — scratch drafts (PRISM notes, an old research agenda), outside the repo. If any is
+- `~/Desktop/*.md` — scratch drafts (Aletheon notes, an old research agenda), outside the repo. If any is
   still load-bearing, move it into `docs/` (or a private repo) and delete the desktop copy, so each fact
   has exactly one home.

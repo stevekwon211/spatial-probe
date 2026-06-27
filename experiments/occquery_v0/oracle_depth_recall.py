@@ -43,7 +43,7 @@ net -> back-project -> voxel vs `av2_sensor._voxelize` (algorithm), DAv2 on Virt
 independent than the traversal oracle, NOT external ground truth".
 
 STACK: onnxruntime + Pillow + numpy + pyarrow ONLY. NO torch, NO cv2. This is an experiment module
-(onnxruntime is allowed here, NOT in src/). Does not touch src/probe or src/prism.
+(onnxruntime is allowed here, NOT in src/). Does not touch src/probe or src/aletheon.
 
 Modes:
   --self-check            geometry + letterbox + ONNX-runs round-trips (no confirmatory data); RUN FIRST.

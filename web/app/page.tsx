@@ -85,7 +85,7 @@ export default async function Landing() {
           </div>
           <nav className="flex items-center gap-1" style={{ fontSize: "var(--fs-mono-md)" }}>
             <Link href="/overview" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.pipeline")}</Link>
-            <Link href="/prism" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.prism")}</Link>
+            <Link href="/aletheon" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.aletheon")}</Link>
             <Link href="/evidence" className="ink-link rounded-md px-3 py-1.5 font-mono" style={{ color: "var(--muted)" }}>{t("nav.evidence")}</Link>
             <LocaleToggle className="ml-1" />
             <Link href="/occquery" className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 text-[13px] font-medium text-black transition-opacity hover:opacity-90">{t("nav.openExplorer")} <ArrowRight className="size-3.5" /></Link>

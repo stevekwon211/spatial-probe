@@ -6,7 +6,7 @@
   },
   "nav": {
     "pipeline": "파이프라인",
-    "prism": "PRISM",
+    "aletheon": "Aletheon",
     "evidence": "증거",
     "openExplorer": "탐색기 열기"
   },
@@ -145,11 +145,11 @@
     "shipped": "배포됨",
     "planned": "예정"
   },
-  "prism": {
-    "metaTitle": "PRISM — 모델이 틀리는 장면을 찾는다",
+  "aletheon": {
+    "metaTitle": "Aletheon — 모델이 틀리는 장면을 찾는다",
     "metaDescription": "답에 label-free 정확성 체크가 붙는 오픈 공간-실패-검색 엔진. 인지 모델을 망가뜨리는 프레임을, 몇 줄로 찾는다.",
     "hero": {
-      "eyebrow": "PRISM",
+      "eyebrow": "Aletheon",
       "title": "모델이 틀리는 장면을, 몇 줄로 찾는다.",
       "lead": "답에 label-free 정확성 체크가 붙는 오픈 공간-실패-검색 엔진. 실패 모드를 쿼리하면, 모든 결과에 어떤 독립 체크가 뒷받침하는지·얼마나 믿을지가 태그로 돌아온다.",
       "seeFailures": "실패 보기",
