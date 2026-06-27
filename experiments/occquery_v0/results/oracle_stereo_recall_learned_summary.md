@@ -1,5 +1,13 @@
 # Oracle-v2 (learned-stereo / IGEV) recall result — ORACLE-INSUFFICIENT (honest negative)
 
+> **CORRECTION (2026-06-28): the comparison baseline here is contaminated by a grader bug.**
+> `camera_oracle._roc_auc` did not average tied ranks → AUCs biased DOWNWARD. Direct re-grade with the fixed
+> metric: classical **census 0.259 → 0.598**, so the "huge jump census→IGEV = density hypothesis confirmed"
+> framing below overstates the gap (census was already ~0.60). The IGEV sceneflow 0.662 is itself a deflated
+> lower bound. Verdict confidence is INDETERMINATE pending a re-grade with the fixed `_roc_auc` + a CI gate.
+> See `oracle_stereo_recall_kitti_summary.md` correction banner. Bug fixed in `camera_oracle.py`.
+
+
 Sealed pre-reg: `oracle_stereo_recall_learned_preregistration.md` (git 1c8b357). Ran 2026-06-27 on a
 RunPod RTX-4090 pod (IGEV-Stereo, Scene-Flow zero-shot `sceneflow.pth`); disparity artifacts re-graded
 by the pure-numpy oracle (`--disparity-source artifact`, deterministic, no GPU in the grade). Total

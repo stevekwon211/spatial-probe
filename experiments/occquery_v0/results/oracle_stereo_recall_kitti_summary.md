@@ -1,5 +1,17 @@
 # Oracle-v2b (KITTI-finetuned IGEV) recall result — ORACLE-INSUFFICIENT (terminal negative)
 
+> **CORRECTION (2026-06-28): conclusion RETRACTED — a grader bug invalidates this verdict's confidence.**
+> An adversarial audit (and direct re-run) found `camera_oracle._roc_auc` did NOT average tied ranks, biasing
+> every AUC-gated result systematically DOWNWARD. Direct local re-grade with the fixed metric: **classical
+> census 0.259 → 0.598** (so the "below-chance / density-limited census" framing below is FALSE — a bug
+> artifact). The IGEV AUCs (sceneflow 0.662, kitti 0.733) are likewise deflated lower bounds; the true kitti
+> AUC may reach/exceed the 0.75 gate (flip to PASS). Independently, the gate was a bare point-estimate on
+> n=60 whose 95% CI [≈0.61, 0.86] straddles 0.75. **Net: the "terminal negative / passive-stereo recall
+> CLOSED / modality ceiling" claim is NOT established — it is INDETERMINATE.** Settling it needs: regenerate
+> the IGEV artifacts on GPU + re-grade with the fixed `_roc_auc` (scipy `rankdata`) and a CI-based gate.
+> Fix committed; `_roc_auc` bug fixed in `camera_oracle.py`. Read the text below as the (now-corrected) record.
+
+
 Sealed pre-reg: `oracle_stereo_recall_kitti_preregistration.md` (git 91e9593). Ran 2026-06-27 on a
 RunPod RTX-4090 (IGEV-Stereo `kitti15.pth`, driving-finetuned); same census-drop-in artifact pipeline,
 re-graded by the pure-numpy oracle. Single variable vs the sceneflow run: the checkpoint only.

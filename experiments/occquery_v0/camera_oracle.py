@@ -66,14 +66,21 @@ def patch_evidence(gray: np.ndarray, u: float, v: float, half: int = _PATCH) -> 
 
 
 def _roc_auc(pos: list[float], neg: list[float]) -> float:
-    """ROC AUC between positive and negative score lists (rank statistic; 0.5 = no separation)."""
+    """ROC AUC between positive and negative score lists (rank statistic; 0.5 = no separation).
+
+    AUC = P(pos > neg) + 0.5 * P(pos == neg) (the Mann-Whitney form). Ties MUST get average ranks
+    so each tied pos/neg pair contributes exactly 0.5 — `scipy.stats.rankdata` (method='average')
+    does this. (A prior version used ordinal `arange(1,N+1)` ranks with no tie averaging; because the
+    positive scores are concatenated first and the sort is stable, every tie went to the negatives,
+    biasing the AUC systematically DOWNWARD on integer/saturating scores. Fixed 2026-06-28; this had
+    contaminated every AUC-gated oracle here.)
+    """
+    from scipy.stats import rankdata
+
     pos_a, neg_a = np.asarray(pos), np.asarray(neg)
     if not len(pos_a) or not len(neg_a):
         return float("nan")
-    # AUC = P(pos > neg); count wins + half ties over all pairs (Mann-Whitney form)
-    order = np.argsort(np.concatenate([pos_a, neg_a]), kind="mergesort")
-    ranks = np.empty(len(order), float)
-    ranks[order] = np.arange(1, len(order) + 1)
+    ranks = rankdata(np.concatenate([pos_a, neg_a]))  # average ranks -> ties contribute 0.5
     r_pos = ranks[: len(pos_a)].sum()
     return float((r_pos - len(pos_a) * (len(pos_a) + 1) / 2) / (len(pos_a) * len(neg_a)))
 
