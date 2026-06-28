@@ -10,6 +10,18 @@
 > CLOSED / modality ceiling" claim is NOT established — it is INDETERMINATE.** Settling it needs: regenerate
 > the IGEV artifacts on GPU + re-grade with the fixed `_roc_auc` (scipy `rankdata`) and a CI-based gate.
 > Fix committed; `_roc_auc` bug fixed in `camera_oracle.py`. Read the text below as the (now-corrected) record.
+>
+> **SETTLED (2026-06-28, GPU re-grade with the fixed metric + bootstrap CI):** re-ran the full IGEV-kitti
+> pass + grade on RunPod. Corrected calibration **AUC = 0.766 (was a bug-deflated 0.733) → PASSES the 0.75
+> point-gate** (`gate_pass: true`). So the "terminal negative / passive-stereo recall CLOSED" claim was a
+> BUG ARTIFACT — the gate is NOT closed. **BUT** the 95% bootstrap CI is **[0.633, 0.876], which straddles
+> 0.75** (`gate_pass_ci_lo: false`) — n=60 is too small to clear the bar *confidently*. AND the downstream
+> recall **miss-rate is INDETERMINATE ("no usable headline frames")** — even past the gate, the following
+> substrate yields no gradeable frames for the actual recall measurement. **Net: the gate flips FAIL→marginal-
+> PASS once the bug is fixed, but the recall itself stays UNESTABLISHED (CI-marginal + substrate-vacuous).**
+> Not a terminal negative, not a clean win — honestly: passive-stereo recall is *plausible but unproven* on
+> this substrate; a clean result needs a larger calibration set (n≫60) + a non-vacuous (in-path-obstacle-dense)
+> substrate. (`oracle_stereo_recall_kitti_corrected.json`.)
 
 
 Sealed pre-reg: `oracle_stereo_recall_kitti_preregistration.md` (git 91e9593). Ran 2026-06-27 on a
