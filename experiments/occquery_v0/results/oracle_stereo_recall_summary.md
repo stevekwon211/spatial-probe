@@ -1,5 +1,13 @@
 # Oracle-v1 — stereo-camera RECALL oracle: ORACLE-INSUFFICIENT (secondary kill, 2026-06-25)
 
+> **CORRECTION (2026-06-28): the AUC below (0.259) is a `_roc_auc` tie-bug artifact.** The original scorer
+> did not average tied ranks; the census score is an integer pixel-count with many ties, so the AUC was
+> deflated. Re-graded with the fixed metric + a bootstrap CI: **AUC 0.598, 95% CI [0.517, 0.679]** — still
+> ORACLE-INSUFFICIENT (the whole CI sits below the 0.75 gate, so census fails the gate *confidently*, not at
+> "below chance"). The "below-chance / density-limited 0.259" reading is retracted. Bug fixed in
+> `camera_oracle.py`; gate now reports `auc_ci95`. (IGEV sceneflow 0.662 / kitti 0.733 are also deflated
+> lower bounds — settling those needs a GPU re-grade, currently deferred on RunPod provisioning.)
+
 Pre-registration sealed BEFORE data: `oracle_stereo_recall_preregistration.md` (commit 6fdbf5c). Module
 `oracle_stereo_recall.py` (commit 4e50a39), pure numpy, geometry self-checked (ego-point round-trip 0.0000m,
 corner undistort↔redistort 0.0000px). 60-patch calibration set human-labeled by the repo owner (34 structure /
