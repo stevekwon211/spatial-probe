@@ -1119,6 +1119,27 @@ def _save_patch(gray_patch: np.ndarray, path: pathlib.Path) -> None:
     Image.fromarray(arr, mode="L").save(path)
 
 
+def _auc_bootstrap_ci(pos: list[float], neg: list[float], n_boot: int = 1000, seed: int = 0) -> tuple[float, float]:
+    """Percentile 95% bootstrap CI for the patch AUC. Stratified: the positive and negative score
+    pools are each resampled with replacement (preserving the pos/neg structure), AUC recomputed via
+    the (tie-corrected) `_roc_auc`. Added 2026-06-28 so the small-n gate decision carries its
+    uncertainty (the audit flagged a bare point-estimate gate). Does NOT change the sealed point-gate."""
+    if not pos or not neg:
+        return (float("nan"), float("nan"))
+    rng = np.random.default_rng(seed)
+    pos_a, neg_a = np.asarray(pos, float), np.asarray(neg, float)
+    aucs = []
+    for _ in range(n_boot):
+        rp = pos_a[rng.integers(0, len(pos_a), len(pos_a))]
+        rn = neg_a[rng.integers(0, len(neg_a), len(neg_a))]
+        a = _roc_auc(list(rp), list(rn))
+        if np.isfinite(a):
+            aucs.append(a)
+    if not aucs:
+        return (float("nan"), float("nan"))
+    return (float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5)))
+
+
 def run_calibration_auc(logs: list[str], data_root: pathlib.Path, cfg: Config,
                         calib_json: pathlib.Path) -> dict:
     """Compute the oracle's reliability AUC over the 60 HUMAN-LABELED patches: ROC AUC of the
@@ -1182,13 +1203,15 @@ def run_calibration_auc(logs: list[str], data_root: pathlib.Path, cfg: Config,
                 else:
                     neg_scores.append(cnt)
     auc = _roc_auc(pos_scores, neg_scores)
+    auc_lo, auc_hi = _auc_bootstrap_ci(pos_scores, neg_scores, n_boot=1000, seed=0)
     # operating-point precision at n_stereo_min: of patches whose count >= n_stereo_min, fraction pos
     all_counts = [(c, 1) for c in pos_scores] + [(c, 0) for c in neg_scores]
     fired = [lab for c, lab in all_counts if c >= cfg.n_stereo_min]
     precision = float(np.mean(fired)) if fired else float("nan")
-    return {"auc": auc, "n_pos": len(pos_scores), "n_neg": len(neg_scores),
+    return {"auc": auc, "auc_ci95": [auc_lo, auc_hi], "n_pos": len(pos_scores), "n_neg": len(neg_scores),
             "operating_point_precision_at_n_stereo_min": precision,
-            "gate_pass": bool(np.isfinite(auc) and auc >= 0.75)}
+            "gate_pass": bool(np.isfinite(auc) and auc >= 0.75),
+            "gate_pass_ci_lo": bool(np.isfinite(auc_lo) and auc_lo >= 0.75)}
 
 
 # ----------------------------------------------------------------------------------------------
