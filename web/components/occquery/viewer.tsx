@@ -28,7 +28,13 @@ type Predicates = {
 type FrameMeta = { t: number; speed: number; n_obstacles_band: number; n_obstacles_total: number; predicates: Predicates };
 type SceneMeta = { scene: string; voxel_size: number; ego: { width: number; length: number; height: number }; n_frames: number; frames: FrameMeta[] };
 
-const BASE = "/data/occquery";
+// Scene data is hosted on Supabase Storage (public bucket `occquery-scenes` in the kencall project)
+// so the deploy serves the full 3D scenes without committing ~285MB to git. The viewer already
+// fetches per-frame on demand, so only viewed frames transfer. Override via NEXT_PUBLIC_OCCQUERY_BASE
+// (e.g. to move to Cloudflare R2 later) — the public URL is not a secret.
+const BASE =
+  process.env.NEXT_PUBLIC_OCCQUERY_BASE ??
+  "https://fppucwdfkkxyaqvgfixa.supabase.co/storage/v1/object/public/occquery-scenes";
 
 const H1_FINDING = FINDINGS.find((f) => f.id === "h1");
 const H3_FINDING = FINDINGS.find((f) => f.id === "h3");
