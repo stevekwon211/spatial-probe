@@ -132,6 +132,31 @@ export function OccqueryViewer() {
     if (nt !== undefined) load(nt).catch(() => {});
   }, [meta, frameIdx, scene]);
 
+  // Background-prefetch ALL frames of the current scene into the cache so stepping/jumping is
+  // instant (each frame is the only network hop; gzipped ~80KB). Throttled so it doesn't flood;
+  // the load() above returns from cache once a frame is prefetched.
+  useEffect(() => {
+    if (!meta) return;
+    let cancelled = false;
+    const ts = meta.frames.map((f) => f.t).filter((t): t is number => t !== undefined);
+    let next = 0;
+    const fetchOne = async (tt: number) => {
+      const key = `${scene}/${tt}`;
+      if (cache.current.has(key)) return;
+      try {
+        const d = await fetch(`${BASE}/${scene}/f${tt}.json`).then((r) => r.json());
+        cache.current.set(key, {
+          obstacles: d.obstacles as Obstacle[],
+          boxes: (d.boxes ?? []) as Box[],
+          reachable: (d.reachable ?? null) as ReachableField | null,
+        });
+      } catch { /* ignore prefetch failures */ }
+    };
+    const worker = async () => { while (!cancelled && next < ts.length) await fetchOne(ts[next++]); };
+    for (let i = 0; i < 6; i++) worker();
+    return () => { cancelled = true; };
+  }, [meta, scene]);
+
   // raw LiDAR point cloud — only fetched when a point-rendering mode is active
   useEffect(() => {
     if (!meta || renderMode === "voxel") { setPoints(null); return; }
