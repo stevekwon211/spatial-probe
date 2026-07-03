@@ -137,6 +137,20 @@ def _box_index(nusc_root: pathlib.Path) -> dict[str, list[dict]]:
 _BOX_INDEX_CACHE: dict[str, dict[str, list[dict]]] = {}
 
 
+def _annotations(root: pathlib.Path) -> dict:
+    """Parse annotations.json once per data root and cache it (the file is ~143 MB on the full
+    corpus; a corpus-scale run calls load_scene hundreds of times). Read-only downstream."""
+    key = str(pathlib.Path(root).resolve())
+    doc = _ANNOTATIONS_CACHE.get(key)
+    if doc is None:
+        doc = json.loads((pathlib.Path(root) / "annotations.json").read_text())
+        _ANNOTATIONS_CACHE[key] = doc
+    return doc
+
+
+_ANNOTATIONS_CACHE: dict[str, dict] = {}
+
+
 def _ego_frame_boxes(sample_token: str, ego_pose: dict, box_index: dict[str, list[dict]]) -> tuple[TrackedBox, ...]:
     """Transform this sample's global nuScenes boxes into the ego frame (forward, left, up), so they
     sit in the SAME frame as the ego-centric occupancy and the ego at the origin."""
@@ -210,7 +224,7 @@ def load_scene(
     distance-only. Raises FileNotFoundError if the nuScenes metadata is absent.
     """
     root = pathlib.Path(data_root)
-    annotations = json.loads((root / "annotations.json").read_text())
+    annotations = _annotations(root)
     scene_infos = annotations["scene_infos"]
     if scene_name not in scene_infos:
         raise KeyError(f"{scene_name!r} not in annotations ({len(scene_infos)} scenes available)")
