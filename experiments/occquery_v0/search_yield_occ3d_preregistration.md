@@ -17,18 +17,18 @@ dense-GT consistency stay closed per docs + memory).
 ## Claims (two legs, each falsifiable)
 
 **C1 (yield — "the corpus contains a minable long-tail at the sealed thresholds").**
-Run the SEALED 20-query set (`queries.yaml`, sealed 2026-06-22, thresholds physically motivated,
-never tuned on this data) over every Occ3D-nuScenes scene on disk, dense GT arm (`mask='none'`,
-`unknown_policy=FREE` — both sealed, matching L1). A query's **scene yield** = retrieved scenes /
-headline scenes (scene matches iff any frame satisfies the predicate — all 20 sealed queries are
-`scope: any`).
-- **C1 HOLDS iff ≥ 8 of the 16 occupancy queries have headline scene-yield in (0%, 20%].**
-- **C1 KILLED (empty) iff ≥ 13 of 16 occupancy queries yield exactly 0** — the search engine mines
+Run the SEALED 24-query set (`queries.yaml`, sealed 2026-06-22, thresholds physically motivated,
+never tuned on this data; 20 occupancy + 4 box-baseline controls — see Amendment 1) over every
+Occ3D-nuScenes scene on disk, dense GT arm (`mask='none'`, `unknown_policy=FREE` — both sealed,
+matching L1). A query's **scene yield** = retrieved scenes / headline scenes (scene matches iff
+any frame satisfies the predicate — all 24 sealed queries are `scope: any`).
+- **C1 HOLDS iff ≥ 10 of the 20 occupancy queries have headline scene-yield in (0%, 20%].**
+- **C1 KILLED (empty) iff ≥ 16 of 20 occupancy queries yield exactly 0** — the search engine mines
   ~nothing from nuScenes at the sealed thresholds; headline becomes that negative.
-- **C1 KILLED (saturated) iff ≥ 8 of 16 occupancy queries yield > 50%** — the events are not
+- **C1 KILLED (saturated) iff ≥ 10 of 20 occupancy queries yield > 50%** — the events are not
   long-tail; the "long-tail mining" framing dies (measurements may still be useful, claim dies).
 - Any other outcome: NO adjective claim; report the full yield table only.
-The 20% band edge and the 8/13/8 counts are claim-boundary knobs sealed here, a priori; the FULL
+The 20% band edge and the 10/16/10 counts are claim-boundary knobs sealed here, a priori; the FULL
 per-query yield table + frame-level hit rates + measured-value distributions (P5/P50/P95 per
 physical quantity) are reported regardless of verdict.
 
@@ -83,7 +83,7 @@ band; a side-region observability proxy is a named follow-up, not smuggled in po
   occlusion-robust with false_block_rate 0.
 - Box-baseline queries (4 tracking controls) run with `with_boxes=True` (nuScenes annotations,
   GPS/IMU-derived boxes — independent of occupancy); their yields are fairness context, no gap
-  re-derivation. The 16 occupancy queries' box-only expressibility = 0 is RESTATED from the sealed
+  re-derivation. The 20 occupancy queries' box-only expressibility = 0 is RESTATED from the sealed
   flags (`refav_expressible`, verified against RefAV's released 32-function set), not recomputed.
 
 ## Data (sealed)
@@ -110,3 +110,15 @@ JSONL checkpoint + measurement parquet, gitignored). Seed 0. Commit hash recorde
 
 Negatives are headlines. If C1 or C2 is killed, the summary leads with the kill. No number from
 the smoke run is ever reported. The verdicts state C1/C2 against these sealed criteria verbatim.
+
+## Amendment 1 (2026-07-03, BEFORE any corpus run — zero scenes had been processed)
+
+The original seal said "20 queries / 16 occupancy", taken from the STALE header comment in
+`queries.yaml` ("clearance/centerline 3 each") rather than the file's content. The actual sealed
+set is **24 queries / 20 occupancy** (clearance 5, centerline 5, free_path 5, corridor 5, box
+baseline 4; verified by `load_queries` — all 20 occupancy have `refav_expressible: false`; the 10
+tag-family queries are unchanged). The runner's fail-loud count guard caught this at smoke start;
+no corpus data was seen. Verdict counts are rescaled at the SAME ratios sealed above: C1 holds
+≥ 50% of occupancy queries long-tail (8/16 → 10/20), killed-empty ≥ 80% zero (13/16 → 16/20),
+killed-saturated ≥ 50% above 50% yield (8/16 → 10/20). C2 is untouched. The sealed queries.yaml
+file itself is NOT edited (its stale comment stays as evidence).
