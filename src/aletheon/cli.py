@@ -68,11 +68,55 @@ def _load_scene_for_query(data: pathlib.Path, scene: str | None, with_boxes: boo
     return None
 
 
+def _query_all_scenes(args: argparse.Namespace, data: pathlib.Path) -> int:
+    """Corpus-scale query over an Occ3D root: evaluate the expression on EVERY scene (sorted),
+    print the matching scenes + per-scene matched frames — the measurement-search verb over a
+    whole labeled corpus. Loader failures are reported to stderr, never silently dropped."""
+    if not ((data / "annotations.json").exists() and (data / "gts").is_dir()):
+        print(f"needs data: --all-scenes requires an Occ3D root (annotations.json + gts), got {data}")
+        return 2
+    from probe.adapters.occ3d import _annotations, load_scene
+
+    names = sorted(_annotations(data)["scene_infos"].keys())
+    if args.limit:
+        names = names[: args.limit]
+    needs_boxes = any(p in args.expr for p in ("distance_to_nearest_object", "ttc", "object_speed", "velocity"))
+    policy = _POLICY[args.policy]
+    scenes_out = []
+    n_loaded = 0
+    for name in names:
+        try:
+            sc = load_scene(name, data, mask="none", with_boxes=needs_boxes)
+        except Exception as e:  # noqa: BLE001 - a corrupt scene is visible, not fatal to the scan
+            print(f"[skip] {name}: {type(e).__name__}: {e}", file=sys.stderr)
+            continue
+        n_loaded += 1
+        matched = []
+        for t in range(len(sc.frames)):
+            ns = namespace(sc, policy)
+            ns["t"] = t
+            try:
+                val = safe_eval(args.expr, ns)
+            except (UnsafeExpression, NameError, SyntaxError) as e:
+                print(f"bad query: {type(e).__name__}: {e}")
+                return 2
+            if bool(val):
+                matched.append(t)
+        if matched:
+            scenes_out.append({"scene": name, "matched_frames": matched, "n_matched": len(matched)})
+    print(json.dumps({"expr": args.expr, "policy": args.policy, "n_scenes": n_loaded,
+                      "n_scenes_matched": len(scenes_out), "scenes": scenes_out},
+                     indent=2, default=float))
+    return 0
+
+
 def _cmd_query(args: argparse.Namespace) -> int:
     data = pathlib.Path(args.data)
     if not data.exists():
         print(f"needs data: {data} does not exist (point --data at an AV2 log dir or an Occ3D root)")
         return 2
+    if args.all_scenes:
+        return _query_all_scenes(args, data)
     # box-reading predicates need the tracked boxes loaded; occupancy/occlusion predicates do not.
     needs_boxes = any(p in args.expr for p in ("distance_to_nearest_object", "ttc", "object_speed", "velocity"))
     sc = _load_scene_for_query(data, args.scene, with_boxes=needs_boxes)
@@ -310,6 +354,9 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--scene", default=None, help="scene name (Occ3D); default = first scene")
     q.add_argument("--policy", default="free", choices=list(_POLICY), help="unknown-voxel policy")
     q.add_argument("--frame", type=int, default=None, help="single frame index; default = all frames")
+    q.add_argument("--all-scenes", dest="all_scenes", action="store_true",
+                   help="scan EVERY scene of an Occ3D root (corpus-scale measurement search)")
+    q.add_argument("--limit", type=int, default=0, help="with --all-scenes: cap scanned scenes")
     q.set_defaults(func=_cmd_query)
 
     ing = sub.add_parser("ingest", help="adapter -> Scene IR (validated); --out to write parquet")

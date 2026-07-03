@@ -166,3 +166,22 @@ def test_export_writes_parquet_on_real_occ3d(capsys, tmp_path):
     out = capsys.readouterr().out
     assert rc == 0
     assert out_pq.exists() and out_pq.stat().st_size > 0
+
+
+@pytest.mark.skipif(not _has_occ3d(), reason="no Occ3D-nuScenes data on disk")
+def test_query_all_scenes_scans_the_occ3d_corpus(capsys):
+    rc = main(["query", "ego_speed(scene, t) >= 0.0", "--data", str(_OCC3D_ROOT),
+               "--all-scenes", "--limit", "2"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    result = json.loads(out)
+    assert result["n_scenes"] == 2
+    assert result["n_scenes_matched"] == 2  # speed >= 0 always true
+    assert all("scene" in s and "n_matched" in s for s in result["scenes"])
+
+
+def test_query_all_scenes_needs_occ3d_root(capsys, tmp_path):
+    rc = main(["query", "ego_speed(scene, t) >= 0.0", "--data", str(tmp_path), "--all-scenes"])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "needs data" in out
