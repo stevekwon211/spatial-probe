@@ -1,0 +1,5 @@
+three*.js
+three*.cjs
+jsm/
+mesh.json
+__pycache__/

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mesh probe — Occ3D 지형 메시 + free-space</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0d12;color:#e6e9ef;
+    font-family:ui-sans-serif,system-ui,sans-serif;overflow:hidden}
+  #hud{position:fixed;top:14px;left:14px;z-index:10;background:rgba(16,19,26,.82);
+    border:1px solid #262b36;border-radius:10px;padding:12px 14px;max-width:340px;font-size:12.5px;line-height:1.5}
+  #hud h1{margin:0 0 6px;font-size:14px;letter-spacing:-.01em}
+  #hud .row{display:flex;justify-content:space-between;gap:12px;margin:2px 0}
+  #hud b{font-variant-numeric:tabular-nums}
+  .k{color:#8b93a1}
+  .legend{margin-top:9px;padding-top:9px;border-top:1px solid #262b36}
+  .legend div{display:flex;align-items:center;gap:7px;margin:3px 0}
+  .sw{width:12px;height:12px;border-radius:3px;flex:none}
+  .warn{margin-top:9px;padding:7px 9px;background:#2a1e12;border:1px solid #4a3417;border-radius:7px;color:#e8b978}
+  #controls{position:fixed;bottom:14px;left:14px;z-index:10;font-size:12px;color:#6b7280}
+  #controls button{background:#1a1e28;color:#cbd2dc;border:1px solid #2b3140;border-radius:6px;
+    padding:5px 10px;font-size:12px;cursor:pointer;margin-right:6px}
+  #controls button.on{background:#4f46e5;color:#fff;border-color:#4f46e5}
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>Occ3D 지형 메시 + free-space</h1>
+  <div class="row"><span class="k">scene</span><b id="scene">…</b></div>
+  <div class="row"><span class="k">occupied voxels</span><b id="nvox">…</b></div>
+  <div class="row"><span class="k">mesh faces</span><b id="nface">…</b></div>
+  <div class="row"><span class="k">ego 주행 corridor clearance</span><b id="clear">…</b></div>
+  <div class="legend">
+    <div><span class="sw" style="background:linear-gradient(#c62828,#1565c0)"></span> dense mesh (높이색, 누적 GT)</div>
+    <div><span class="sw" style="background:#00e5ff"></span> 단일스윕이 실제 확인한 점</div>
+    <div><span class="sw" style="background:#00e676;border:1px solid #00e676"></span> ego 차량 · <span class="sw" style="background:rgba(255,193,7,.35);border:1px solid #ffc107"></span> corridor</div>
+    <div><span class="sw" style="background:#ff1744"></span> corridor 내 가장 가까운 장애물 (clearance)</div>
+  </div>
+  <div class="warn" id="warn">단일스윕은 이 씬의 <b id="unk">…</b>가 UNKNOWN(가림). 즉 solid mesh는 <b>누적 GT의 추론</b> — 청록 점만이 한 번의 관측으로 확인된 것.</div>
+</div>
+<div id="controls">
+  드래그=회전 · 휠=줌 &nbsp;|&nbsp;
+  <button id="tMesh" class="on">mesh</button>
+  <button id="tObs" class="on">단일스윕 점</button>
+  <button id="tCorr" class="on">corridor</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './jsm/controls/OrbitControls.js';
+
+const d = await (await fetch('./mesh.json')).json();
+document.getElementById('scene').textContent = d.scene;
+document.getElementById('nvox').textContent = d.n_occupied.toLocaleString();
+document.getElementById('nface').textContent = d.faces.length.toLocaleString();
+document.getElementById('clear').textContent = (d.corridor.clearance?.toFixed(1) ?? '—') + ' m';
+document.getElementById('unk').textContent = (d.unknown_frac_single_sweep*100).toFixed(1) + '%';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0d12);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 4000);
+camera.up.set(0,0,1);
+camera.position.set(-26,-26,20);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.target.set(6,0,0);
+scene.add(new THREE.HemisphereLight(0xbfd3ff, 0x20242e, 1.1));
+const dir = new THREE.DirectionalLight(0xffffff, 0.7); dir.position.set(-1,-1,2); scene.add(dir);
+const grid = new THREE.GridHelper(160, 40, 0x223, 0x161922); grid.rotation.x = Math.PI/2; scene.add(grid);
+
+// --- dense mesh (exposed-face quads -> two triangles), colored by height ---
+const verts = d.verts, faces = d.faces, fz = d.face_z;
+const zs = fz.slice().sort((a,b)=>a-b);
+const zlo = zs[Math.floor(zs.length*0.02)], zhi = zs[Math.floor(zs.length*0.98)];
+const pos = [], col = [];
+const c = new THREE.Color();
+for (let i=0;i<faces.length;i++){
+  const [a,b,cc,dd] = faces[i];
+  const t = Math.min(1, Math.max(0, (fz[i]-zlo)/(zhi-zlo+1e-6)));
+  c.setHSL(0.62 - 0.62*t, 0.75, 0.45 + 0.12*t);
+  for (const idx of [a,b,cc, a,cc,dd]) {            // quad -> 2 tris (CCW)
+    pos.push(verts[idx][0], verts[idx][1], verts[idx][2]);
+    col.push(c.r, c.g, c.b);
+  }
+}
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+geo.setAttribute('color', new THREE.Float32BufferAttribute(col,3));
+geo.computeVertexNormals();
+const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.95, metalness:0.0, flatShading:true, side:THREE.DoubleSide}));
+scene.add(mesh);
+
+// --- single-sweep confirmed points (the honesty overlay) ---
+const obs = d.observed;
+const op = new Float32Array(obs.length*3);
+for (let i=0;i<obs.length;i++){ op[i*3]=obs[i][0]; op[i*3+1]=obs[i][1]; op[i*3+2]=obs[i][2]; }
+const og = new THREE.BufferGeometry(); og.setAttribute('position', new THREE.BufferAttribute(op,3));
+const obsPts = new THREE.Points(og, new THREE.PointsMaterial({color:0x00e5ff, size:0.22}));
+scene.add(obsPts);
+
+// --- ego + corridor + clearance ---
+const ego = new THREE.Mesh(new THREE.BoxGeometry(4.5,2,1.6), new THREE.MeshBasicMaterial({color:0x00e676, wireframe:true}));
+ego.position.set(0,0,0.8); scene.add(ego);
+const cor = d.corridor;
+const corridor = new THREE.Mesh(new THREE.BoxGeometry(cor.horizon, cor.half_width*2, 3),
+  new THREE.MeshBasicMaterial({color:0xffc107, transparent:true, opacity:0.12}));
+corridor.position.set(cor.horizon/2, 0, 1.0); scene.add(corridor);
+const corridorEdge = new THREE.LineSegments(new THREE.EdgesGeometry(corridor.geometry), new THREE.LineBasicMaterial({color:0xffc107, transparent:true, opacity:0.5}));
+corridorEdge.position.copy(corridor.position); scene.add(corridorEdge);
+let clearMarker=null;
+if (cor.clearance!=null){
+  clearMarker = new THREE.Mesh(new THREE.SphereGeometry(0.6,16,12), new THREE.MeshBasicMaterial({color:0xff1744}));
+  clearMarker.position.set(cor.clearance, 0, 1.0); scene.add(clearMarker);
+  // a line from ego to the clearance point
+  const lg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,1), new THREE.Vector3(cor.clearance,0,1)]);
+  scene.add(new THREE.Line(lg, new THREE.LineBasicMaterial({color:0xff1744})));
+}
+
+// toggles
+const bind=(id,obj)=>{const b=document.getElementById(id); b.onclick=()=>{obj.visible=!obj.visible; b.classList.toggle('on', obj.visible);};};
+bind('tMesh', mesh); bind('tObs', obsPts);
+document.getElementById('tCorr').onclick=(e)=>{const v=!corridor.visible;[corridor,corridorEdge].forEach(o=>o.visible=v);if(clearMarker)clearMarker.visible=v;e.target.classList.toggle('on',v);};
+
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
