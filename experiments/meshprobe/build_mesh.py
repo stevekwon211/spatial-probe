@@ -81,42 +81,84 @@ def exposed_face_mesh(occ: np.ndarray, origin, vsize: float):
     return np.array(verts, dtype=float), np.array(quads, dtype=int), np.array(fz, dtype=float)
 
 
+def _mesh_dict(occ_mask, origin, vs):
+    v, q, fz = exposed_face_mesh(occ_mask.astype(np.uint8) * OCCUPIED, origin, vs)
+    return {"verts": v.round(3).tolist(), "faces": q.tolist(), "face_z": fz.round(2).tolist()}
+
+
+def _corridor_states(dense, obs, half_width=1.0, horizon=20.0, step=0.4, z_max=2.0):
+    """Walk the ego forward centerline (+x). At each x-step, classify the corridor band from the
+    SINGLE sweep: BLOCKED (an obstacle), FREE (all observed & empty), or UNKNOWN (unseen — could
+    hide anything). This is the honest free-space story: the planner's clearance comes from the
+    aggregated GT, but a single sweep only CONFIRMS free so far — beyond that the 'clear path' is fog.
+    Returns (states list, confirmed_free_distance, aggregated_clearance)."""
+    D, O = dense.occupancy, obs.occupancy
+    origin, vs = np.asarray(dense.origin), dense.voxel_size
+    nx, ny, nz = O.shape
+    zc = origin[2] + np.arange(nz) * vs
+    zsel = (zc > dense.ground_height) & (zc <= dense.ground_height + z_max)
+    states, agg_clear, conf_free = [], None, None
+    x = step
+    while x < horizon:
+        # voxel index range for this x-slab and the |y|<half_width band
+        ix = int(round((x - origin[0]) / vs))
+        jy0 = int(round((-half_width - origin[1]) / vs)); jy1 = int(round((half_width - origin[1]) / vs))
+        if not (0 <= ix < nx):
+            break
+        Dband = D[ix, max(0, jy0):min(ny, jy1 + 1)][:, zsel]
+        Oband = O[ix, max(0, jy0):min(ny, jy1 + 1)][:, zsel]
+        if (Dband == OCCUPIED).any() and agg_clear is None:
+            agg_clear = round(x, 1)
+        total = Oband.size
+        free_frac = float((Oband == FREE).sum() / total) if total else 0.0
+        if (Oband == OCCUPIED).any():
+            st = "blocked"
+        elif (Oband == UNKNOWN).any():
+            st = "unknown"
+        else:
+            st = "free"
+        if free_frac < 0.99 and conf_free is None:
+            conf_free = round(x, 1)      # single-sweep fully-confirms free only up to here
+        states.append({"x": round(x, 1), "state": st, "free_frac": round(free_frac, 2)})
+        x += step
+    return states, conf_free, agg_clear
+
+
 def main():
     names = sorted(_annotations(DATA)["scene_infos"].keys())
-    # pick a scene with a decent obstacle count near the ego
     nm = names[0]
-    dense = load_scene(nm, DATA, mask="none").frames[0].grid
-    obs = load_scene(nm, DATA, mask="lidar").frames[0].grid
+    dense = load_scene(nm, DATA, mask="none").frames[0].grid   # aggregated GT (unknown≈0)
+    obs = load_scene(nm, DATA, mask="lidar").frames[0].grid     # single sweep (mostly unknown)
     origin, vs = dense.origin, dense.voxel_size
 
-    verts, quads, fz = exposed_face_mesh(dense.occupancy, origin, vs)
-    print(f"{nm}: {int((dense.occupancy==OCCUPIED).sum())} occupied voxels -> "
-          f"{len(verts)} verts, {len(quads)} faces")
-
-    # single-sweep confirmed obstacles (what one LiDAR actually sees) — the honesty overlay
-    obs_centers = obs.obstacle_centers(max_height_agl=2.0)
-    # unknown fraction (the occlusion reality)
+    # Obstacles = the aggregated solid world, meshed (legible terrain).
+    mesh_obst = _mesh_dict(dense.occupancy == OCCUPIED, origin, vs)
+    # What the single sweep actually confirmed as an obstacle (bright dots — real observation).
+    obs_pts = obs.obstacle_centers(max_height_agl=2.0)
     unk_frac = float((obs.occupancy == UNKNOWN).mean())
 
-    # ego forward corridor: a band along +x (ego forward), ego half-width 1.0 m, horizon 20 m.
-    # nearest obstacle in that band = the clearance the planner cares about.
-    occ_centers = dense.obstacle_centers(max_height_agl=2.0)
-    in_corr = (occ_centers[:, 0] > 0) & (occ_centers[:, 0] < 20) & (np.abs(occ_centers[:, 1]) < 1.0)
-    corr_obs = occ_centers[in_corr]
-    clearance = float(corr_obs[:, 0].min()) if len(corr_obs) else None
+    states, conf_free, _ = _corridor_states(dense, obs)
+    # aggregated clearance from the reliable continuous obstacle centers (matches the red marker)
+    occ_c = dense.obstacle_centers(max_height_agl=2.0)
+    corr = occ_c[(occ_c[:, 0] > 0) & (occ_c[:, 0] < 20) & (np.abs(occ_c[:, 1]) < 1.0)]
+    agg_clear = round(float(corr[:, 0].min()), 1) if len(corr) else None
+    n_free = sum(1 for s in states if s["state"] == "free")
+    n_unk = sum(1 for s in states if s["state"] == "unknown")
+    print(f"{nm}: {len(mesh_obst['faces'])} obstacle faces | corridor "
+          f"free {n_free} / unknown {n_unk} / total {len(states)} steps | "
+          f"aggregated clearance {agg_clear} m, single-sweep confirmed-free to {conf_free} m")
 
     OUT.write_text(json.dumps({
         "scene": nm, "voxel_size": vs, "origin": list(origin),
-        "verts": verts.round(3).tolist(),
-        "faces": quads.tolist(),
-        "face_z": fz.round(2).tolist(),
-        "observed": obs_centers.round(2).tolist(),   # single-sweep confirmed points
+        "obstacles": mesh_obst,
+        "observed": obs_pts.round(2).tolist(),
         "unknown_frac_single_sweep": round(unk_frac, 3),
-        "corridor": {"half_width": 1.0, "horizon": 20.0, "clearance": clearance,
-                     "n_obstacles": int(len(corr_obs))},
-        "n_occupied": int((dense.occupancy == OCCUPIED).sum()),
+        "corridor": {"half_width": 1.0, "horizon": 20.0,
+                     "aggregated_clearance": agg_clear,   # planner's number (from dense GT)
+                     "confirmed_free_to": conf_free,      # how far ONE sweep confirms free
+                     "states": states},                   # per-0.4m free/unknown/blocked
     }))
-    print(f"wrote {OUT} | single-sweep unknown {unk_frac:.1%} | corridor clearance {clearance} m")
+    print(f"wrote {OUT} | single-sweep unknown {unk_frac:.1%}")
 
 
 if __name__ == "__main__":
