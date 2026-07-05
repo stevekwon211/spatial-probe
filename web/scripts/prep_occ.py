@@ -106,6 +106,49 @@ def voxel_colors(scene, dense, cam_info) -> np.ndarray:
     return full
 
 
+def _mat4(quat, t):
+    m = np.eye(4); m[:3, :3] = _quat_to_rot(quat); m[:3, 3] = np.asarray(t, float); return m
+
+
+def voxel_colors_multiframe(dense, frames) -> np.ndarray:
+    """Per-voxel RGB projected from ALL keyframes' cameras (not just frame-0), each keyframe's camera
+    transformed into the frame-0 ego frame (the grid's frame) via the ego poses:
+    cam->ego0 = inv(ego0) @ egok @ extrinsic_k. The ego drives forward, so far/side surfaces one
+    keyframe missed get colored by a keyframe that drove up to them -> near-full coverage, nearest
+    (smallest-z) view wins per voxel. This feeds the web's fallback color layer (no shader change)."""
+    origin, vs = np.asarray(dense.origin, float), dense.voxel_size
+    nx, ny, nz = dense.occupancy.shape
+    occ_idx = np.argwhere(dense.occupancy == OCCUPIED)
+    if not len(occ_idx):
+        return np.zeros((nx * ny * nz, 3), np.uint8)
+    centers = origin + (occ_idx + 0.5) * vs
+    colors = np.zeros((len(occ_idx), 3), np.uint8)
+    best_z = np.full(len(occ_idx), np.inf)
+    f0 = next(iter(frames.values()))
+    ego0_inv = np.linalg.inv(_mat4(f0["ego_pose"]["rotation"], f0["ego_pose"]["translation"]))
+    for info in frames.values():
+        egok = _mat4(info["ego_pose"]["rotation"], info["ego_pose"]["translation"])
+        for cam, cs in info["camera_sensor"].items():
+            cam2ego0 = ego0_inv @ egok @ _mat4(cs["extrinsic"]["rotation"], cs["extrinsic"]["translation"])
+            R, t = cam2ego0[:3, :3], cam2ego0[:3, 3]   # sensor->ego0
+            K = np.asarray(cs["intrinsics"], float)
+            img = np.asarray(Image.open(_SAMPLES / cs["img_path"]).convert("RGB"))
+            H, W = img.shape[:2]
+            pc = (centers - t) @ R                     # ego0 -> camera
+            z = pc[:, 2]
+            zz = np.where(np.abs(z) < 1e-6, 1e-6, z)
+            u = (pc @ K.T)[:, 0] / zz; v = (pc @ K.T)[:, 1] / zz
+            infr = (z > 0.1) & (u >= 0) & (u < W) & (v >= 0) & (v < H) & (z < best_z)
+            ui = np.clip(u, 0, W - 1).astype(int); vi = np.clip(v, 0, H - 1).astype(int)
+            idx = np.where(infr)[0]
+            colors[idx] = img[vi[idx], ui[idx]]
+            best_z[idx] = z[idx]
+    full = np.zeros((nx * ny * nz, 3), np.uint8)
+    lin = occ_idx[:, 0] * ny * nz + occ_idx[:, 1] * nz + occ_idx[:, 2]
+    full[lin] = colors
+    return full
+
+
 def export_cameras(scene, cam_info) -> list[dict]:
     """Export the frame-0 six camera images + their intrinsics/extrinsic so the web can do
     render-time PROJECTIVE texturing — sampling the full-res image per fragment instead of the
@@ -173,8 +216,9 @@ def main() -> None:
         dims = {"nx": nx, "ny": ny, "nz": nz, "voxel_size": dense.voxel_size, "origin": list(dense.origin)}
         (_OUT / f"{sc}.occ.bin").write_bytes(occ.tobytes())
 
-        cam_info = ann["scene_infos"][sc][next(iter(ann["scene_infos"][sc]))]["camera_sensor"]
-        col = voxel_colors(sc, dense, cam_info)
+        scene_frames = ann["scene_infos"][sc]
+        cam_info = scene_frames[next(iter(scene_frames))]["camera_sensor"]
+        col = voxel_colors_multiframe(dense, scene_frames)  # all 39 keyframes -> near-full coverage
         (_OUT / f"{sc}.color.bin").write_bytes(col.tobytes())
         n_colored = int((col.reshape(-1, 3).any(axis=1)).sum())
         cams = export_cameras(sc, cam_info)  # full-res images for render-time projective texturing
