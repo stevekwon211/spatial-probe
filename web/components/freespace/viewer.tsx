@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FreeSpaceScene } from "./freespace-scene";
-import { fetchIndex, fetchFreespace, fetchOccGrid, type FreeSpace, type OccIndex } from "./data";
+import { fetchIndex, fetchFreespace, fetchOccGrid, fetchColor, vertexColors, type FreeSpace, type OccIndex } from "./data";
 import { meshOccupancy, modelSdf, type Algo, type Meshed } from "./mdc-client";
 
 // Free-space review: the "honest occupancy" view. Aggregated Occ3D -> a Rust/WASM QEF-MDC surface
@@ -19,7 +19,9 @@ export function FreeSpaceViewer() {
   const [scene, setScene] = useState("");
   const [algo, setAlgo] = useState<Algo>("qef");
   const [showMesh, setShowMesh] = useState(true);
+  const [textured, setTextured] = useState(true);
   const [mesh, setMesh] = useState<Meshed | null>(null);
+  const [colors, setColors] = useState<Float32Array | null>(null);
   const [fs, setFs] = useState<FreeSpace | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -28,14 +30,16 @@ export function FreeSpaceViewer() {
   useEffect(() => {
     if (!scene || !idx) return;
     let cancelled = false;
-    setBusy(true); setMesh(null); setFs(null);
+    setBusy(true); setMesh(null); setFs(null); setColors(null);
     (async () => {
-      const [f, g] = await Promise.all([fetchFreespace(scene), fetchOccGrid(scene, idx)]);
+      const [f, g, col] = await Promise.all([fetchFreespace(scene), fetchOccGrid(scene, idx), fetchColor(scene)]);
       if (cancelled) return;
       setFs(f);
       const m = await meshOccupancy(g, algo);
       if (cancelled) return;
-      setMesh(m); setBusy(false);
+      setMesh(m);
+      setColors(col ? vertexColors(m.pos, col, idx) : null); // camera-projective vertex color
+      setBusy(false);
     })().catch(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
   }, [scene, algo, idx]);
@@ -70,6 +74,10 @@ export function FreeSpaceViewer() {
         </ToggleGroup>
 
         <Button variant={showMesh ? "secondary" : "ghost"} size="sm" onClick={() => setShowMesh((v) => !v)}>mesh</Button>
+        <Button variant={textured ? "secondary" : "ghost"} size="sm" onClick={() => setTextured((v) => !v)}
+          disabled={!colors} title={colors ? "camera-projective color" : "no camera images for this scene"}>
+          {textured && colors ? "textured" : "shaded"}
+        </Button>
         <Button variant="outline" size="sm" onClick={exportSdf} className="font-mono text-xs">↓ model SDF (.f32)</Button>
 
         {mesh && (
@@ -92,7 +100,7 @@ export function FreeSpaceViewer() {
       {/* scene + honest-gap */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_20rem]">
         <div className="min-h-0 overflow-hidden rounded-xl border">
-          <FreeSpaceScene mesh={mesh} fs={fs} showMesh={showMesh} />
+          <FreeSpaceScene mesh={mesh} colors={colors} fs={fs} showMesh={showMesh} textured={textured} />
         </div>
         <div className="flex flex-col gap-3">
           <Card>

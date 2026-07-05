@@ -1,33 +1,113 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Doeon Kwon
-"""Precompute Occ3D-nuScenes free-space data for the web free-space view. Dumps, per scene:
+"""Precompute Occ3D-nuScenes free-space data for the web free-space view. Per scene (only scenes
+that have BOTH occupancy GT and the 6 camera images on disk):
   public/occ/<scene>.occ.bin        dense occupancy uint8 [x*ny*nz+y*nz+z], 1=solid (WASM meshes it)
-  public/occ/<scene>.freespace.json corridor honesty (aggregated clearance vs single-sweep confirmed,
-                                     fog fraction, observed points) — the "honest gap"
-  public/occ/scenes.json            {scenes, dims, voxel_size} index
+  public/occ/<scene>.color.bin      per-voxel RGB uint8 [x*ny*nz+y*nz+z]*3, 0=uncolored — projective
+                                     color from the cameras (nearest unoccluded view), used as the
+                                     mesh's vertex color = "camera-textured occupancy"
+  public/occ/<scene>.freespace.json corridor honesty (aggregated clear vs single-sweep confirmed)
+  public/occ/scenes.json            index
 
-Static files, so the Next app serves them with no Python at runtime. Run:
-  cd spatial-probe && PYTHONPATH=src .venv/bin/python web/scripts/prep_occ.py --limit 12
+Projective coloring is HONEST diffuse: nuScenes RGB has lighting baked in (no albedo/roughness/
+metallic — true PBR needs inverse rendering), and geometry is 0.4 m voxels, so texture detail
+exceeds geometry. Occlusion is a z-buffer per camera (a voxel is colored only from a view where it
+is the front surface). Run:  cd spatial-probe && PYTHONPATH=src .venv/bin/python web/scripts/prep_occ.py
 """
 from __future__ import annotations
 
 import argparse
 import json
-import math
+import os
 import pathlib
 
 import numpy as np
+from PIL import Image
 
 from probe.adapters.occ3d import load_scene, _annotations
 from probe.grid import OCCUPIED, FREE, UNKNOWN
 
 _ROOT = str(pathlib.Path.home() / "Projects/Personal/spatial-probe/data")
+_SAMPLES = pathlib.Path(_ROOT) / "samples"
 _OUT = pathlib.Path(__file__).resolve().parents[1] / "public" / "occ"
 _VEHICLE_Z_MAX = 2.0
 
 
+def _quat_to_rot(q):
+    w, x, y, z = q
+    n = w * w + x * x + y * y + z * z
+    if n < 1e-12:
+        return np.eye(3)
+    s = 2.0 / n
+    return np.array([
+        [1 - s * (y * y + z * z), s * (x * y - z * w), s * (x * z + y * w)],
+        [s * (x * y + z * w), 1 - s * (x * x + z * z), s * (y * z - x * w)],
+        [s * (x * z - y * w), s * (y * z + x * w), 1 - s * (x * x + y * y)],
+    ])
+
+
+def _dual_available(ann, limit):
+    gts = set(os.listdir(pathlib.Path(_ROOT) / "gts"))
+    out = []
+    for sc, frames in ann["scene_infos"].items():
+        if sc not in gts:
+            continue
+        info = frames[next(iter(frames))]
+        cams = info["camera_sensor"]
+        if all((_SAMPLES / cs["img_path"]).exists() for cs in cams.values()):
+            out.append(sc)
+        if len(out) >= limit:
+            break
+    return sorted(out)
+
+
+def voxel_colors(scene, dense, cam_info) -> np.ndarray:
+    """Per-occupied-voxel RGB via projective coloring with z-buffer occlusion. Voxels are in the
+    ego frame (the occupancy grid's frame); each camera's extrinsic is sensor->ego."""
+    origin, vs = np.asarray(dense.origin, float), dense.voxel_size
+    nx, ny, nz = dense.occupancy.shape
+    occ_idx = np.argwhere(dense.occupancy == OCCUPIED)  # (M,3)
+    if not len(occ_idx):
+        return np.zeros((nx * ny * nz, 3), np.uint8)
+    centers = origin + (occ_idx + 0.5) * vs             # ego-frame world centers
+    colors = np.zeros((len(occ_idx), 3), np.uint8)
+    best_z = np.full(len(occ_idx), np.inf)
+
+    for cam, cs in cam_info.items():
+        K = np.asarray(cs["intrinsics"], float)
+        R = _quat_to_rot(cs["extrinsic"]["rotation"])   # sensor->ego
+        t = np.asarray(cs["extrinsic"]["translation"], float)
+        img = np.asarray(Image.open(_SAMPLES / cs["img_path"]).convert("RGB"))
+        H, W = img.shape[:2]
+        pc = (centers - t) @ R                          # ego -> camera
+        z = pc[:, 2]
+        uv = (pc @ K.T)
+        zz = np.where(np.abs(z) < 1e-6, 1e-6, z)
+        u = uv[:, 0] / zz
+        v = uv[:, 1] / zz
+        infr = (z > 0.1) & (u >= 0) & (u < W) & (v >= 0) & (v < H)
+        ui = np.clip(u, 0, W - 1).astype(int)
+        vi = np.clip(v, 0, H - 1).astype(int)
+        # z-buffer occlusion: nearest voxel wins each 4px pixel bucket -> only the front surface is colored
+        seen: dict[tuple[int, int], int] = {}
+        for i in np.argsort(z):
+            if not infr[i]:
+                continue
+            key = (int(vi[i]) >> 2, int(ui[i]) >> 2)
+            if key in seen:
+                continue
+            seen[key] = i
+            if z[i] < best_z[i]:
+                best_z[i] = z[i]
+                colors[i] = img[vi[i], ui[i]]
+    full = np.zeros((nx * ny * nz, 3), np.uint8)
+    lin = occ_idx[:, 0] * ny * nz + occ_idx[:, 1] * nz + occ_idx[:, 2]
+    full[lin] = colors
+    return full
+
+
 def corridor(dense, obs, half_width=1.0, horizon=20.0, step=0.4):
-    D, O = dense.occupancy, obs.occupancy
+    O = obs.occupancy
     origin, vs = np.asarray(dense.origin), dense.voxel_size
     nx, ny, nz = O.shape
     zc = origin[2] + np.arange(nz) * vs
@@ -52,10 +132,12 @@ def corridor(dense, obs, half_width=1.0, horizon=20.0, step=0.4):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=12)
+    ap.add_argument("--limit", type=int, default=10)
     args = ap.parse_args()
     _OUT.mkdir(parents=True, exist_ok=True)
-    scenes = sorted(_annotations(_ROOT)["scene_infos"].keys())[: args.limit]
+    ann = _annotations(_ROOT)
+    scenes = _dual_available(ann, args.limit)
+    print(f"scenes with occupancy + camera images: {len(scenes)} -> {scenes}", flush=True)
     dims = None
     for i, sc in enumerate(scenes):
         dense = load_scene(sc, _ROOT, mask="none").frames[0].grid
@@ -64,6 +146,11 @@ def main() -> None:
         nx, ny, nz = occ.shape
         dims = {"nx": nx, "ny": ny, "nz": nz, "voxel_size": dense.voxel_size, "origin": list(dense.origin)}
         (_OUT / f"{sc}.occ.bin").write_bytes(occ.tobytes())
+
+        cam_info = ann["scene_infos"][sc][next(iter(ann["scene_infos"][sc]))]["camera_sensor"]
+        col = voxel_colors(sc, dense, cam_info)
+        (_OUT / f"{sc}.color.bin").write_bytes(col.tobytes())
+        n_colored = int((col.reshape(-1, 3).any(axis=1)).sum())
 
         states, conf_free = corridor(dense, obs)
         oc = dense.obstacle_centers(max_height_agl=_VEHICLE_Z_MAX)
@@ -80,9 +167,9 @@ def main() -> None:
                          "aggregated_clearance": agg_clear, "confirmed_free_to": conf_free, "states": states},
         }
         (_OUT / f"{sc}.freespace.json").write_text(json.dumps(fs))
-        print(f"[{i+1}/{len(scenes)}] {sc}: occ {nx}x{ny}x{nz} + corridor {len(states)} steps, clear {agg_clear}/{conf_free}", flush=True)
+        print(f"[{i+1}/{len(scenes)}] {sc}: {nx}x{ny}x{nz} · {n_colored} voxels colored · clear {agg_clear}/{conf_free}", flush=True)
 
-    (_OUT / "scenes.json").write_text(json.dumps({"scenes": scenes, **(dims or {})}))
+    (_OUT / "scenes.json").write_text(json.dumps({"scenes": scenes, "textured": True, **(dims or {})}))
     print(f"wrote {len(scenes)} scenes to {_OUT}")
 
 
