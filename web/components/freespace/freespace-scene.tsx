@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 import type { Meshed } from "./mdc-client";
-import type { FreeSpace } from "./data";
+import type { FreeSpace, Cams } from "./data";
+import { buildProjectiveMaterial, loadCamTextures } from "./projective";
 
 // nuScenes ego frame: x-forward, y-left, z-up. We keep those axes and set the camera up to +z, so
 // the free-space plane reads as the ground (matches the occquery viewer's ego convention).
 const CORRIDOR_COLOR = { free: 0x22c55e, unknown: 0xf59e0b, blocked: 0xef4444 } as const;
 
-function MeshObject({ mesh, colors, showMesh, textured }: {
-  mesh: Meshed | null; colors: Float32Array | null; showMesh: boolean; textured: boolean;
+function MeshObject({ mesh, colors, cams, showMesh, textured }: {
+  mesh: Meshed | null; colors: Float32Array | null; cams: Cams | null; showMesh: boolean; textured: boolean;
 }) {
   const useColor = textured && !!colors && colors.length === (mesh?.pos.length ?? -1);
   const geom = useMemo(() => {
@@ -25,11 +26,35 @@ function MeshObject({ mesh, colors, showMesh, textured }: {
     } else {
       g.computeVertexNormals();
     }
-    if (useColor && colors) g.setAttribute("color", new THREE.BufferAttribute(colors, 3)); // camera-projective vertex color
+    // always carry a per-vertex color: the voxel color if we have it, else the shaded blue. The
+    // standard material only reads it when useColor; the projective shader uses it as the
+    // uncovered-fragment fallback (so no flat-blue holes where the cameras didn't see).
+    let vcol = colors;
+    if (!vcol || vcol.length !== mesh.pos.length) {
+      vcol = new Float32Array(mesh.pos.length);
+      for (let i = 0; i < vcol.length; i += 3) { vcol[i] = 0.42; vcol[i + 1] = 0.5; vcol[i + 2] = 0.82; }
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(vcol, 3));
     return g;
-  }, [mesh, colors, useColor]);
+  }, [mesh, colors]);
   useEffect(() => () => geom?.dispose(), [geom]);
+
+  // Render-time projective texturing (full-res camera images) when textured + cams available.
+  const [projMat, setProjMat] = useState<THREE.ShaderMaterial | null>(null);
+  useEffect(() => {
+    if (!textured || !cams?.cameras?.length) { setProjMat(null); return; }
+    let alive = true; let texs: THREE.Texture[] = [];
+    loadCamTextures(cams.cameras).then((t) => {
+      if (!alive) { t.forEach((x) => x.dispose()); return; }
+      texs = t;
+      setProjMat(buildProjectiveMaterial(cams.cameras, t));
+    });
+    return () => { alive = false; texs.forEach((x) => x.dispose()); };
+  }, [cams, textured]);
+  useEffect(() => () => projMat?.dispose(), [projMat]);
+
   if (!geom || !showMesh) return null;
+  if (projMat) return <mesh geometry={geom} material={projMat} />; // projected camera color, full-res
   return (
     <mesh geometry={geom}>
       <meshStandardMaterial vertexColors={useColor} color={useColor ? "#ffffff" : "#6b7fd0"}
@@ -73,8 +98,8 @@ function Corridor({ fs }: { fs: FreeSpace | null }) {
   );
 }
 
-export function FreeSpaceScene({ mesh, colors, fs, showMesh, textured }: {
-  mesh: Meshed | null; colors: Float32Array | null; fs: FreeSpace | null; showMesh: boolean; textured: boolean;
+export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured }: {
+  mesh: Meshed | null; colors: Float32Array | null; cams: Cams | null; fs: FreeSpace | null; showMesh: boolean; textured: boolean;
 }) {
   return (
     <Canvas dpr={[1, 2]} style={{ background: "#0b0d12" }}>
@@ -90,7 +115,7 @@ export function FreeSpaceScene({ mesh, colors, fs, showMesh, textured }: {
         <meshBasicMaterial color="#00e676" wireframe />
       </mesh>
       <axesHelper args={[3]} />
-      <MeshObject mesh={mesh} colors={colors} showMesh={showMesh} textured={textured} />
+      <MeshObject mesh={mesh} colors={colors} cams={cams} showMesh={showMesh} textured={textured} />
       <Observed fs={fs} />
       <Corridor fs={fs} />
     </Canvas>

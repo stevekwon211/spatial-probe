@@ -106,6 +106,32 @@ def voxel_colors(scene, dense, cam_info) -> np.ndarray:
     return full
 
 
+def export_cameras(scene, cam_info) -> list[dict]:
+    """Export the frame-0 six camera images + their intrinsics/extrinsic so the web can do
+    render-time PROJECTIVE texturing — sampling the full-res image per fragment instead of the
+    0.4 m per-voxel color (which smears). Extrinsic is sensor->ego; we store its inverse rotation
+    Rt = R^T (ego->sensor, row-major) + sensor origin t so the shader computes p_sensor =
+    Rt·(p_ego − t) directly. Same frame as the mesh (both are frame-0 ego)."""
+    import shutil
+    cam_dir = _OUT / "cams" / scene
+    cam_dir.mkdir(parents=True, exist_ok=True)
+    out = []
+    for cam, cs in cam_info.items():
+        src = _SAMPLES / cs["img_path"]
+        W, H = Image.open(src).size
+        shutil.copyfile(src, cam_dir / f"{cam}.jpg")  # native nuScenes JPEG, K unchanged
+        K = np.asarray(cs["intrinsics"], float)
+        R = _quat_to_rot(cs["extrinsic"]["rotation"])          # sensor->ego
+        Rt = R.T                                               # ego->sensor
+        out.append({
+            "cam": cam, "img": f"cams/{scene}/{cam}.jpg", "w": W, "h": H,
+            "fx": float(K[0, 0]), "fy": float(K[1, 1]), "cx": float(K[0, 2]), "cy": float(K[1, 2]),
+            "Rt": [float(x) for x in Rt.flatten()],           # row-major ego->sensor
+            "t": [float(x) for x in cs["extrinsic"]["translation"]],
+        })
+    return out
+
+
 def corridor(dense, obs, half_width=1.0, horizon=20.0, step=0.4):
     O = obs.occupancy
     origin, vs = np.asarray(dense.origin), dense.voxel_size
@@ -151,6 +177,8 @@ def main() -> None:
         col = voxel_colors(sc, dense, cam_info)
         (_OUT / f"{sc}.color.bin").write_bytes(col.tobytes())
         n_colored = int((col.reshape(-1, 3).any(axis=1)).sum())
+        cams = export_cameras(sc, cam_info)  # full-res images for render-time projective texturing
+        (_OUT / f"{sc}.cams.json").write_text(json.dumps({"cameras": cams}))
 
         states, conf_free = corridor(dense, obs)
         oc = dense.obstacle_centers(max_height_agl=_VEHICLE_Z_MAX)

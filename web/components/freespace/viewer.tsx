@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FreeSpaceScene } from "./freespace-scene";
-import { fetchIndex, fetchFreespace, fetchOccGrid, fetchColor, vertexColors, type FreeSpace, type OccIndex } from "./data";
+import { fetchIndex, fetchFreespace, fetchOccGrid, fetchColor, fetchCams, vertexColors, type FreeSpace, type OccIndex, type Cams } from "./data";
 import { meshOccupancy, modelSdf, type Algo, type Meshed } from "./mdc-client";
 
 // Free-space review: the "honest occupancy" view. Aggregated Occ3D -> a Rust/WASM QEF-MDC surface
@@ -22,6 +22,7 @@ export function FreeSpaceViewer() {
   const [textured, setTextured] = useState(true);
   const [mesh, setMesh] = useState<Meshed | null>(null);
   const [colors, setColors] = useState<Float32Array | null>(null);
+  const [cams, setCams] = useState<Cams | null>(null);
   const [fs, setFs] = useState<FreeSpace | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -30,15 +31,17 @@ export function FreeSpaceViewer() {
   useEffect(() => {
     if (!scene || !idx) return;
     let cancelled = false;
-    setBusy(true); setMesh(null); setFs(null); setColors(null);
+    setBusy(true); setMesh(null); setFs(null); setColors(null); setCams(null);
     (async () => {
-      const [f, g, col] = await Promise.all([fetchFreespace(scene), fetchOccGrid(scene, idx), fetchColor(scene)]);
+      const [f, g, col, cm] = await Promise.all([
+        fetchFreespace(scene), fetchOccGrid(scene, idx), fetchColor(scene), fetchCams(scene),
+      ]);
       if (cancelled) return;
-      setFs(f);
+      setFs(f); setCams(cm);
       const m = await meshOccupancy(g, algo);
       if (cancelled) return;
       setMesh(m);
-      setColors(col ? vertexColors(m.pos, col, idx) : null); // camera-projective vertex color
+      setColors(col ? vertexColors(m.pos, col, idx) : null); // per-voxel fallback color
       setBusy(false);
     })().catch(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
@@ -75,8 +78,9 @@ export function FreeSpaceViewer() {
 
         <Button variant={showMesh ? "secondary" : "ghost"} size="sm" onClick={() => setShowMesh((v) => !v)}>mesh</Button>
         <Button variant={textured ? "secondary" : "ghost"} size="sm" onClick={() => setTextured((v) => !v)}
-          disabled={!colors} title={colors ? "camera-projective color" : "no camera images for this scene"}>
-          {textured && colors ? "textured" : "shaded"}
+          disabled={!cams && !colors}
+          title={cams ? "render-time projective texturing (full-res cameras)" : colors ? "per-voxel camera color" : "no camera images for this scene"}>
+          {textured && cams ? "projected" : textured && colors ? "textured" : "shaded"}
         </Button>
         <Button variant="outline" size="sm" onClick={exportSdf} className="font-mono text-xs">↓ model SDF (.f32)</Button>
 
@@ -100,7 +104,7 @@ export function FreeSpaceViewer() {
       {/* scene + honest-gap */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_20rem]">
         <div className="min-h-0 overflow-hidden rounded-xl border">
-          <FreeSpaceScene mesh={mesh} colors={colors} fs={fs} showMesh={showMesh} textured={textured} />
+          <FreeSpaceScene mesh={mesh} colors={colors} cams={cams} fs={fs} showMesh={showMesh} textured={textured} />
         </div>
         <div className="flex flex-col gap-3">
           <Card>
@@ -115,9 +119,10 @@ export function FreeSpaceViewer() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">reading</CardTitle></CardHeader>
             <CardContent className="text-xs leading-relaxed text-muted-foreground">
-              solid 표면(파랑)은 여러 스윕을 합친 <b className="text-foreground">자신만만한 추측</b>. 청록 점은 <b className="text-foreground">한 번에 실제 확인</b>한 것.
-              통로가 초록(free)이 아니라 대부분 <b className="text-foreground">amber(fog)</b>면 = 이 프레임에선 확인 못 한 곳 → 검수/자동라벨이 여기를 의심해야 함.
-              qef-MDC는 EDT→SDF→QEF로 각진 구조를 코너에 얹고(surface-nets는 뭉갬), <b className="text-foreground">defects</b>는 아직 non-manifold인 셀 수(정직한 QA 신호).
+              solid 표면은 여러 스윕을 합친 <b className="text-foreground">자신만만한 추측</b>. <b className="text-foreground">projected</b>는 그 표면에 카메라 원본 픽셀을 프레임마다 직접 투영 —
+              <b className="text-foreground">또렷한 곳</b>은 카메라가 실제로 본 픽셀, <b className="text-foreground">뿌연 곳</b>은 못 본 면이라 0.4m 근사색으로 채운 것.
+              청록 점은 <b className="text-foreground">한 번에 실제 확인</b>한 것. 통로가 대부분 <b className="text-foreground">amber(fog)</b>면 = 이 프레임에선 확인 못 한 곳 → 검수/자동라벨이 의심해야 함.
+              qef-MDC는 EDT→SDF→QEF로 각진 구조를 코너에 얹고, <b className="text-foreground">defects</b>는 아직 non-manifold인 셀 수(정직한 QA 신호).
             </CardContent>
           </Card>
         </div>

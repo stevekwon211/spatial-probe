@@ -5,3 +5,7 @@
 /public/data/occquery
 # The small Aletheon demo frame images ARE committed (CDN static, ~744KB, referenced as /data/frames/*)
 *.tsbuildinfo
+
+# projective-texturing camera images + params (derived from gitignored data/samples, local-only)
+/public/occ/cams/
+/public/occ/*.cams.json

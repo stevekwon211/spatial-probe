@@ -19,8 +19,23 @@ export interface OccIndex {
   nx: number; ny: number; nz: number; voxel_size: number; origin: [number, number, number];
 }
 
+/** One camera's intrinsics + ego->sensor rotation (Rt, row-major) + sensor origin (t), frame-0. */
+export interface Cam {
+  cam: string; img: string; w: number; h: number;
+  fx: number; fy: number; cx: number; cy: number;
+  Rt: number[]; t: number[];
+}
+export interface Cams { cameras: Cam[]; }
+
 export async function fetchIndex(): Promise<OccIndex> {
   const r = await fetch("/api/occ");
+  return r.json();
+}
+
+/** The frame-0 six cameras for render-time projective texturing, or null if not prepped. */
+export async function fetchCams(scene: string): Promise<Cams | null> {
+  const r = await fetch(`/occ/${scene}.cams.json`);
+  if (!r.ok) return null;
   return r.json();
 }
 
