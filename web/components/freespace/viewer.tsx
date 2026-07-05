@@ -20,6 +20,7 @@ export function FreeSpaceViewer() {
   const [algo, setAlgo] = useState<Algo>("qef");
   const [showMesh, setShowMesh] = useState(true);
   const [textured, setTextured] = useState(true);
+  const [showSplat, setShowSplat] = useState(false);
   const [mesh, setMesh] = useState<Meshed | null>(null);
   const [colors, setColors] = useState<Float32Array | null>(null);
   const [cams, setCams] = useState<Cams | null>(null);
@@ -82,6 +83,11 @@ export function FreeSpaceViewer() {
           title={cams ? "render-time projective texturing (full-res cameras)" : colors ? "per-voxel camera color" : "no camera images for this scene"}>
           {textured && cams ? "projected" : textured && colors ? "textured" : "shaded"}
         </Button>
+        <Button variant={showSplat ? "secondary" : "ghost"} size="sm" onClick={() => setShowSplat((v) => !v)}
+          disabled={scene !== "scene-0061"}
+          title={scene === "scene-0061" ? "image-based 3D Gaussian splat (644k, photoreal)" : "splat only prepped for scene-0061"}>
+          splat
+        </Button>
         <Button variant="outline" size="sm" onClick={exportSdf} className="font-mono text-xs">↓ model SDF (.f32)</Button>
 
         {mesh && (
@@ -104,7 +110,7 @@ export function FreeSpaceViewer() {
       {/* scene + honest-gap */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_20rem]">
         <div className="min-h-0 overflow-hidden rounded-xl border">
-          <FreeSpaceScene mesh={mesh} colors={colors} cams={cams} fs={fs} showMesh={showMesh} textured={textured} />
+          <FreeSpaceScene mesh={mesh} colors={colors} cams={cams} fs={fs} showMesh={showMesh} textured={textured} showSplat={showSplat} scene={scene} />
         </div>
         <div className="flex flex-col gap-3">
           <Card>

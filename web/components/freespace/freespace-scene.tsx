@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { Grid, OrbitControls, PerspectiveCamera } from "@react-three/drei";
+import { Grid, OrbitControls, PerspectiveCamera, Splat } from "@react-three/drei";
 import * as THREE from "three";
 import type { Meshed } from "./mdc-client";
 import type { FreeSpace, Cams } from "./data";
@@ -98,8 +98,9 @@ function Corridor({ fs }: { fs: FreeSpace | null }) {
   );
 }
 
-export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured }: {
-  mesh: Meshed | null; colors: Float32Array | null; cams: Cams | null; fs: FreeSpace | null; showMesh: boolean; textured: boolean;
+export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured, showSplat, scene }: {
+  mesh: Meshed | null; colors: Float32Array | null; cams: Cams | null; fs: FreeSpace | null;
+  showMesh: boolean; textured: boolean; showSplat: boolean; scene: string;
 }) {
   return (
     <Canvas dpr={[1, 2]} style={{ background: "#0b0d12" }}>
@@ -116,6 +117,9 @@ export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured }: {
       </mesh>
       <axesHelper args={[3]} />
       <MeshObject mesh={mesh} colors={colors} cams={cams} showMesh={showMesh} textured={textured} />
+      {/* image-based gsplat reconstruction (644k Gaussians); global->ego0 alignment baked into the
+          .splat bytes so it renders at identity, sharing the makeDefault camera + OrbitControls */}
+      {showSplat && scene === "scene-0061" && <Splat src={`/gsplat/${scene}/gsplat.splat`} alphaTest={0.1} />}
       <Observed fs={fs} />
       <Corridor fs={fs} />
     </Canvas>
