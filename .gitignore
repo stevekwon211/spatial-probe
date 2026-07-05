@@ -32,3 +32,6 @@ web/next-env.d.ts
 .DS_Store
 .idea/
 .vscode/
+
+# gsplat per-scene prep (derived from gitignored data/samples)
+web/public/gsplat/
