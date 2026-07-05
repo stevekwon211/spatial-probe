@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FreeSpaceScene } from "./freespace-scene";
-import { fetchIndex, fetchFreespace, fetchOccGrid, fetchColor, fetchCams, vertexColors, type FreeSpace, type OccIndex, type Cams } from "./data";
+import { fetchIndex, fetchFreespace, fetchOccGrid, fetchColor, fetchCams, fetchSplatMeta, vertexColors, type FreeSpace, type OccIndex, type Cams, type SplatMeta } from "./data";
 import { meshOccupancy, modelSdf, type Algo, type Meshed } from "./mdc-client";
 
 // Free-space review: the "honest occupancy" view. Aggregated Occ3D -> a Rust/WASM QEF-MDC surface
@@ -24,6 +24,7 @@ export function FreeSpaceViewer() {
   const [mesh, setMesh] = useState<Meshed | null>(null);
   const [colors, setColors] = useState<Float32Array | null>(null);
   const [cams, setCams] = useState<Cams | null>(null);
+  const [splatMeta, setSplatMeta] = useState<SplatMeta | null>(null);
   const [fs, setFs] = useState<FreeSpace | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,13 +33,13 @@ export function FreeSpaceViewer() {
   useEffect(() => {
     if (!scene || !idx) return;
     let cancelled = false;
-    setBusy(true); setMesh(null); setFs(null); setColors(null); setCams(null);
+    setBusy(true); setMesh(null); setFs(null); setColors(null); setCams(null); setSplatMeta(null);
     (async () => {
-      const [f, g, col, cm] = await Promise.all([
-        fetchFreespace(scene), fetchOccGrid(scene, idx), fetchColor(scene), fetchCams(scene),
+      const [f, g, col, cm, sm] = await Promise.all([
+        fetchFreespace(scene), fetchOccGrid(scene, idx), fetchColor(scene), fetchCams(scene), fetchSplatMeta(scene),
       ]);
       if (cancelled) return;
-      setFs(f); setCams(cm);
+      setFs(f); setCams(cm); setSplatMeta(sm);
       const m = await meshOccupancy(g, algo);
       if (cancelled) return;
       setMesh(m);
@@ -83,9 +84,9 @@ export function FreeSpaceViewer() {
           title={cams ? "render-time projective texturing (full-res cameras)" : colors ? "per-voxel camera color" : "no camera images for this scene"}>
           {textured && cams ? "projected" : textured && colors ? "textured" : "shaded"}
         </Button>
-        <Button variant={showSplat ? "secondary" : "ghost"} size="sm" onClick={() => setShowSplat((v) => !v)}
-          disabled={scene !== "scene-0061"}
-          title={scene === "scene-0061" ? "image-based 3D Gaussian splat (644k, photoreal)" : "splat only prepped for scene-0061"}>
+        <Button variant={showSplat && splatMeta ? "secondary" : "ghost"} size="sm" onClick={() => setShowSplat((v) => !v)}
+          disabled={!splatMeta}
+          title={splatMeta ? `image-based 3D Gaussian splat (${splatMeta.count.toLocaleString()}, photoreal)` : "no splat asset for this scene"}>
           splat
         </Button>
         <Button variant="outline" size="sm" onClick={exportSdf} className="font-mono text-xs">↓ model SDF (.f32)</Button>
@@ -110,7 +111,7 @@ export function FreeSpaceViewer() {
       {/* scene + honest-gap */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_20rem]">
         <div className="min-h-0 overflow-hidden rounded-xl border">
-          <FreeSpaceScene mesh={mesh} colors={colors} cams={cams} fs={fs} showMesh={showMesh} textured={textured} showSplat={showSplat} scene={scene} />
+          <FreeSpaceScene mesh={mesh} colors={colors} cams={cams} fs={fs} showMesh={showMesh} textured={textured} showSplat={showSplat && !!splatMeta} scene={scene} />
         </div>
         <div className="flex flex-col gap-3">
           <Card>
@@ -129,6 +130,8 @@ export function FreeSpaceViewer() {
               <b className="text-foreground">또렷한 곳</b>은 카메라가 실제로 본 픽셀, <b className="text-foreground">뿌연 곳</b>은 못 본 면이라 0.4m 근사색으로 채운 것.
               청록 점은 <b className="text-foreground">한 번에 실제 확인</b>한 것. 통로가 대부분 <b className="text-foreground">amber(fog)</b>면 = 이 프레임에선 확인 못 한 곳 → 검수/자동라벨이 의심해야 함.
               qef-MDC는 EDT→SDF→QEF로 각진 구조를 코너에 얹고, <b className="text-foreground">defects</b>는 아직 non-manifold인 셀 수(정직한 QA 신호).
+              {splatMeta && <span className="mt-1.5 block"><b className="text-foreground">splat</b>은 같은 씬을 카메라 234장으로 복원한 <b className="text-foreground">{splatMeta.count.toLocaleString()} Gaussian</b>
+              (floater {splatMeta.preCull.toLocaleString()}개서 컬링, sub-voxel). 복셀=정직·거침(unknown 라벨), splat=실사·추측(라벨 없음, 헛것 위험) — 목적이 다름. 뿌연 건 under-trained + 동적객체 ghost.</span>}
             </CardContent>
           </Card>
         </div>

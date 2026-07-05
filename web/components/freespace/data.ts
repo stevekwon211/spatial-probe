@@ -39,6 +39,16 @@ export async function fetchCams(scene: string): Promise<Cams | null> {
   return r.json();
 }
 
+/** gsplat sidecar meta (rendered Gaussian count + sub-voxel ratio). Its presence is the feature
+ * flag for the splat toggle — if the (gitignored/derived) asset isn't deployed, this 404s and the
+ * splat stays disabled instead of the <Splat> loader crashing the page. */
+export interface SplatMeta { count: number; voxelVerts: number; ratio: number; preCull: number; }
+export async function fetchSplatMeta(scene: string): Promise<SplatMeta | null> {
+  const r = await fetch(`/gsplat/${scene}/gsplat.meta.json`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function fetchFreespace(scene: string): Promise<FreeSpace> {
   const r = await fetch(`/occ/${scene}.freespace.json`);
   return r.json();

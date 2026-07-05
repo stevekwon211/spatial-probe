@@ -117,9 +117,10 @@ export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured, sho
       </mesh>
       <axesHelper args={[3]} />
       <MeshObject mesh={mesh} colors={colors} cams={cams} showMesh={showMesh} textured={textured} />
-      {/* image-based gsplat reconstruction (644k Gaussians); global->ego0 alignment baked into the
-          .splat bytes so it renders at identity, sharing the makeDefault camera + OrbitControls */}
-      {showSplat && scene === "scene-0061" && <Splat src={`/gsplat/${scene}/gsplat.splat`} alphaTest={0.1} />}
+      {/* image-based gsplat reconstruction; global->ego0 alignment baked into the .splat bytes so it
+          renders at identity, sharing the makeDefault camera + OrbitControls. Availability (asset
+          present) is gated by the caller via showSplat (meta-detected), so no 404 crash. */}
+      {showSplat && <Splat src={`/gsplat/${scene}/gsplat.splat`} alphaTest={0.1} />}
       <Observed fs={fs} />
       <Corridor fs={fs} />
     </Canvas>
