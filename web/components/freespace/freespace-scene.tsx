@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Grid, OrbitControls, PerspectiveCamera, Splat } from "@react-three/drei";
 import * as THREE from "three";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Meshed } from "./mdc-client";
 import type { FreeSpace, Cams } from "./data";
 import { buildProjectiveMaterial, loadCamTextures } from "./projective";
@@ -21,21 +22,20 @@ function MeshObject({ mesh, colors, cams, showMesh, textured }: {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(mesh.pos, 3));
     g.setIndex(new THREE.BufferAttribute(mesh.idx, 1));
-    if (mesh.normals && mesh.normals.length === mesh.pos.length) {
-      g.setAttribute("normal", new THREE.BufferAttribute(mesh.normals, 3)); // analytic SDF-gradient normals
-    } else {
-      g.computeVertexNormals();
-    }
-    // always carry a per-vertex color: the voxel color if we have it, else the shaded blue. The
+    // always carry a per-vertex color: the voxel color if we have it, else the shaded grey. The
     // standard material only reads it when useColor; the projective shader uses it as the
-    // uncovered-fragment fallback (so no flat-blue holes where the cameras didn't see).
+    // uncovered-fragment fallback (so no flat holes where the cameras didn't see).
     let vcol = colors;
     if (!vcol || vcol.length !== mesh.pos.length) {
       vcol = new Float32Array(mesh.pos.length);
       for (let i = 0; i < vcol.length; i += 3) { vcol[i] = 0.42; vcol[i + 1] = 0.5; vcol[i + 2] = 0.82; }
     }
     g.setAttribute("color", new THREE.BufferAttribute(vcol, 3));
-    return g;
+    // Crease-aware normals: the mesher's analytic SDF-gradient normals are a smooth low-res field
+    // that rounds every corner and shades flat walls like clay (the "blobby" look). Recomputing
+    // normals with a 30deg crease keeps walls flat + makes building corners hard, so the 0.4m voxel
+    // shape reads crisply — no mesher/data change. (De-indexes; copies the color attribute too.)
+    return toCreasedNormals(g, THREE.MathUtils.degToRad(30));
   }, [mesh, colors]);
   useEffect(() => () => geom?.dispose(), [geom]);
 
@@ -53,15 +53,21 @@ function MeshObject({ mesh, colors, cams, showMesh, textured }: {
   }, [cams, textured]);
   useEffect(() => () => projMat?.dispose(), [projMat]);
 
+  // Imperative shaded material: declaring <meshStandardMaterial> with a dynamic vertexColors flag does
+  // NOT reconcile in R3F (the compiled program is cached, so toggling projected->shaded kept rendering
+  // the old vertexColors=true material = flat voxel color). Building it here, keyed on useColor, gives
+  // a fresh correctly-compiled material. Opaque neutral clay so the light rig reads as solid 3D form.
+  const shadedMat = useMemo(() => new THREE.MeshStandardMaterial({
+    vertexColors: useColor,
+    color: new THREE.Color(useColor ? "#ffffff" : "#6b7688"),
+    side: THREE.DoubleSide, roughness: 0.8, metalness: 0,
+  }), [useColor]);
+  useEffect(() => () => shadedMat.dispose(), [shadedMat]);
+
   if (!geom || !showMesh) return null;
-  if (projMat) return <mesh geometry={geom} material={projMat} />; // projected camera color, full-res
-  return (
-    <mesh geometry={geom}>
-      <meshStandardMaterial vertexColors={useColor} color={useColor ? "#ffffff" : "#6b7fd0"}
-        transparent opacity={textured ? 0.95 : 0.55} side={THREE.DoubleSide}
-        flatShading={!mesh?.normals} roughness={0.9} metalness={0} />
-    </mesh>
-  );
+  // gate on `textured` too: when toggling to shaded, projMat clears a frame late, so without this the
+  // stale projective material would render in the shaded view.
+  return <mesh geometry={geom} material={projMat && textured ? projMat : shadedMat} />;
 }
 
 function Observed({ fs }: { fs: FreeSpace | null }) {
@@ -106,8 +112,13 @@ export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured, sho
     <Canvas dpr={[1, 2]} style={{ background: "#0b0d12" }}>
       <PerspectiveCamera makeDefault position={[-22, -20, 16]} up={[0, 0, 1]} fov={55} far={2000} />
       <OrbitControls enableDamping makeDefault target={[6, 0, 0]} />
-      <ambientLight intensity={textured ? 1.6 : 0.7} color={textured ? "#ffffff" : "#8899bb"} />
-      <directionalLight intensity={textured ? 0.9 : 1.2} position={[0.5, -0.7, 1]} />
+      {/* z-up form rig (only affects the shaded meshStandardMaterial — projective/splat/overlays are
+          unlit): low cool ambient + high key + cool low fill + back rim, so roofs read bright,
+          near walls lit, far walls fall to shadow = solid 3D form instead of flat white. */}
+      <ambientLight intensity={0.25} color="#8b97ad" />
+      <directionalLight intensity={1.15} position={[9, 7, 14]} />
+      <directionalLight intensity={0.45} position={[-11, -6, 3]} color="#7f8ba3" />
+      <directionalLight intensity={0.4} position={[-4, 11, 7]} />
       <Grid args={[120, 120]} rotation={[Math.PI / 2, 0, 0]} cellColor="#161922" sectionColor="#222b3a"
         fadeDistance={90} infiniteGrid />
       {/* ego vehicle at the origin */}
