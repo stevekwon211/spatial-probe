@@ -24,7 +24,7 @@ import pathlib
 import numpy as np
 from PIL import Image
 
-from probe.adapters.occ3d import load_scene, _annotations
+from probe.adapters.occ3d import load_scene, _annotations, _ordered_tokens, GROUND_CLASSES
 from probe.grid import OCCUPIED, FREE, UNKNOWN
 
 _ROOT = str(pathlib.Path.home() / "Projects/Personal/spatial-probe/data")
@@ -175,6 +175,35 @@ def export_cameras(scene, cam_info) -> list[dict]:
     return out
 
 
+def ground_heightfield(scene_frames, root):
+    """BEV top-ground-surface heightfield from the RAW Occ3D semantics. The drivable/sidewalk/terrain
+    classes (11-14) are mapped to FREE by the probe encoding, so they are ABSENT from the OCCUPIED-only
+    mesh -- every obstacle then floats over a black void. This exports the confidently-drivable FREE
+    surface as its own honest layer, in the same frame-0 ego grid as the mesh.
+
+    Per (x,y) column: the z-index of the TOP ground voxel, sentinel 255 where there is NO ground label.
+    Occ3D does NOT label ground under obstacle columns, so those 255s are GENUINE holes -- obstacles stay
+    visibly detached (the correct honest reading), we do NOT fill under them. Returns:
+      hz  uint8 [nx*ny]  top ground z-index (255 = no ground)
+      sub uint8 [nx*ny]  subtype of that top voxel: 0 none, 1 driveable, 2 other_flat, 3 sidewalk, 4 terrain
+    """
+    tok0 = _ordered_tokens(scene_frames)[0]  # same frame-0 the mesh's dense grid uses
+    sem = np.load(pathlib.Path(root) / scene_frames[tok0]["gt_path"])["semantics"]  # (nx,ny,nz) uint8
+    nx, ny, nz = sem.shape
+    gmask = np.isin(sem, list(GROUND_CLASSES))
+    zi = np.where(gmask, np.arange(nz)[None, None, :], -1)
+    top = zi.max(axis=2)                                      # (nx,ny) top ground z-index, -1 if none
+    hz = np.where(top >= 0, top, 255).astype(np.uint8)
+    lut = np.zeros(int(sem.max()) + 1, np.uint8)             # semantic class -> subtype
+    for c, s in ((11, 1), (12, 2), (13, 3), (14, 4)):
+        if c < len(lut):
+            lut[c] = s
+    sub = np.zeros((nx, ny), np.uint8)
+    ix, iy = np.where(top >= 0)
+    sub[ix, iy] = lut[sem[ix, iy, top[ix, iy]]]
+    return np.ascontiguousarray(hz), np.ascontiguousarray(sub)
+
+
 def corridor(dense, obs, half_width=1.0, horizon=20.0, step=0.4):
     O = obs.occupancy
     origin, vs = np.asarray(dense.origin), dense.voxel_size
@@ -224,6 +253,11 @@ def main() -> None:
         cams = export_cameras(sc, cam_info)  # full-res images for render-time projective texturing
         (_OUT / f"{sc}.cams.json").write_text(json.dumps({"cameras": cams}))
 
+        hz, gsub = ground_heightfield(scene_frames, _ROOT)  # FREE drivable surface as its own honest layer
+        (_OUT / f"{sc}.ground.bin").write_bytes(hz.tobytes())
+        (_OUT / f"{sc}.groundsub.bin").write_bytes(gsub.tobytes())
+        n_ground = int((hz != 255).sum())
+
         states, conf_free = corridor(dense, obs)
         oc = dense.obstacle_centers(max_height_agl=_VEHICLE_Z_MAX)
         corr = oc[(oc[:, 0] > 0) & (oc[:, 0] < 20) & (np.abs(oc[:, 1]) < 1.0)]
@@ -239,7 +273,7 @@ def main() -> None:
                          "aggregated_clearance": agg_clear, "confirmed_free_to": conf_free, "states": states},
         }
         (_OUT / f"{sc}.freespace.json").write_text(json.dumps(fs))
-        print(f"[{i+1}/{len(scenes)}] {sc}: {nx}x{ny}x{nz} · {n_colored} voxels colored · clear {agg_clear}/{conf_free}", flush=True)
+        print(f"[{i+1}/{len(scenes)}] {sc}: {nx}x{ny}x{nz} · {n_colored} voxels colored · {n_ground} ground cells · clear {agg_clear}/{conf_free}", flush=True)
 
     (_OUT / "scenes.json").write_text(json.dumps({"scenes": scenes, "textured": True, **(dims or {})}))
     print(f"wrote {len(scenes)} scenes to {_OUT}")

@@ -6,38 +6,50 @@ import { Grid, OrbitControls, PerspectiveCamera, Splat } from "@react-three/drei
 import * as THREE from "three";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Meshed } from "./mdc-client";
-import type { FreeSpace, Cams } from "./data";
+import type { FreeSpace, Cams, Ground, OccIndex } from "./data";
+import { buildGroundGeometry } from "./data";
 import { buildProjectiveMaterial, loadCamTextures } from "./projective";
 
 // nuScenes ego frame: x-forward, y-left, z-up. We keep those axes and set the camera up to +z, so
 // the free-space plane reads as the ground (matches the occquery viewer's ego convention).
 const CORRIDOR_COLOR = { free: 0x22c55e, unknown: 0xf59e0b, blocked: 0xef4444 } as const;
 
-function MeshObject({ mesh, colors, cams, showMesh, textured }: {
-  mesh: Meshed | null; colors: Float32Array | null; cams: Cams | null; showMesh: boolean; textured: boolean;
+function MeshObject({ mesh, colors, debris, cams, showMesh, textured, showDebris }: {
+  mesh: Meshed | null; colors: Float32Array | null; debris: Uint8Array | null; cams: Cams | null;
+  showMesh: boolean; textured: boolean; showDebris: boolean;
 }) {
   const useColor = textured && !!colors && colors.length === (mesh?.pos.length ?? -1);
-  const geom = useMemo(() => {
+  // Split the mesh into a SOLID part and a DEBRIS part (triangles whose 3 verts all belong to a tiny
+  // isolated component — the floating-island snowstorm). Nothing is deleted; the debris part just
+  // renders faded by default so a reviewer can still un-fade and inspect it. A triangle is debris only
+  // when all 3 verts are flagged, so a real surface bordering noise stays solid.
+  const geoms = useMemo(() => {
     if (!mesh) return null;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(mesh.pos, 3));
-    g.setIndex(new THREE.BufferAttribute(mesh.idx, 1));
-    // always carry a per-vertex color: the voxel color if we have it, else the shaded grey. The
-    // standard material only reads it when useColor; the projective shader uses it as the
-    // uncovered-fragment fallback (so no flat holes where the cameras didn't see).
     let vcol = colors;
     if (!vcol || vcol.length !== mesh.pos.length) {
       vcol = new Float32Array(mesh.pos.length);
       for (let i = 0; i < vcol.length; i += 3) { vcol[i] = 0.42; vcol[i + 1] = 0.5; vcol[i + 2] = 0.82; }
     }
-    g.setAttribute("color", new THREE.BufferAttribute(vcol, 3));
-    // Crease-aware normals: the mesher's analytic SDF-gradient normals are a smooth low-res field
-    // that rounds every corner and shades flat walls like clay (the "blobby" look). Recomputing
-    // normals with a 30deg crease keeps walls flat + makes building corners hard, so the 0.4m voxel
-    // shape reads crisply — no mesher/data change. (De-indexes; copies the color attribute too.)
-    return toCreasedNormals(g, THREE.MathUtils.degToRad(30));
-  }, [mesh, colors]);
-  useEffect(() => () => geom?.dispose(), [geom]);
+    const idx = mesh.idx;
+    const solidIdx: number[] = [], debrisIdx: number[] = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+      (debris && debris[a] && debris[b] && debris[c] ? debrisIdx : solidIdx).push(a, b, c);
+    }
+    // Crease-aware normals (30deg): the mesher's smooth SDF-gradient normals round every corner and
+    // shade flat walls like clay (the "blobby" look); creasing keeps walls flat + corners hard so the
+    // 0.4m voxel shape reads crisply. De-indexes; copies the color attribute too.
+    const make = (indices: number[]) => {
+      if (!indices.length) return null;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(mesh.pos, 3));
+      g.setAttribute("color", new THREE.BufferAttribute(vcol!, 3));
+      g.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
+      return toCreasedNormals(g, THREE.MathUtils.degToRad(30));
+    };
+    return { solid: make(solidIdx), debris: make(debrisIdx) };
+  }, [mesh, colors, debris]);
+  useEffect(() => () => { geoms?.solid?.dispose(); geoms?.debris?.dispose(); }, [geoms]);
 
   // Render-time projective texturing (full-res camera images) when textured + cams available.
   const [projMat, setProjMat] = useState<THREE.ShaderMaterial | null>(null);
@@ -64,10 +76,66 @@ function MeshObject({ mesh, colors, cams, showMesh, textured }: {
   }), [useColor]);
   useEffect(() => () => shadedMat.dispose(), [shadedMat]);
 
-  if (!geom || !showMesh) return null;
+  // Faded material for the debris part: translucent, no depth write, so the floating-island snowstorm
+  // recedes to a low-confidence haze instead of reading as solid geometry (toggle showDebris to inspect).
+  const fadedMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: new THREE.Color("#8a94a6"), transparent: true, opacity: 0.12, depthWrite: false,
+    side: THREE.DoubleSide, roughness: 1, metalness: 0,
+  }), []);
+  useEffect(() => () => fadedMat.dispose(), [fadedMat]);
+
+  if (!geoms || !showMesh) return null;
   // gate on `textured` too: when toggling to shaded, projMat clears a frame late, so without this the
   // stale projective material would render in the shaded view.
-  return <mesh geometry={geom} material={projMat && textured ? projMat : shadedMat} />;
+  const solidMat = projMat && textured ? projMat : shadedMat;
+  return (
+    <>
+      {geoms.solid && <mesh geometry={geoms.solid} material={solidMat} />}
+      {geoms.debris && <mesh geometry={geoms.debris} material={showDebris ? solidMat : fadedMat} />}
+    </>
+  );
+}
+
+// The FREE drivable-surface floor (classes 11-14, mapped to FREE so absent from the OCCUPIED mesh).
+// It anchors the scene so obstacles read as objects-on-a-street. Rendered with the SAME projective
+// camera shader when textured (real road/lane pixels), else a dim recessed grey so a confidently-FREE
+// surface reads visibly distinct from OCCUPIED obstacles. Where Occ3D has no ground label (under/around
+// obstacles) the tile is absent, so the floor keeps honest holes — obstacles stay honestly detached.
+function GroundMesh({ ground, idx, cams, textured }: {
+  ground: Ground | null; idx: OccIndex | null; cams: Cams | null; textured: boolean;
+}) {
+  const geom = useMemo(() => {
+    if (!ground || !idx) return null;
+    const { pos, idx: ind, color } = buildGroundGeometry(ground, idx);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setIndex(new THREE.BufferAttribute(ind, 1));
+    g.setAttribute("color", new THREE.BufferAttribute(color, 3)); // projective-shader fallback color
+    g.computeVertexNormals(); // flat tiles -> all +z, so the cameras (above) face it
+    return g;
+  }, [ground, idx]);
+  useEffect(() => () => geom?.dispose(), [geom]);
+
+  const [projMat, setProjMat] = useState<THREE.ShaderMaterial | null>(null);
+  useEffect(() => {
+    if (!textured || !cams?.cameras?.length) { setProjMat(null); return; }
+    let alive = true; let texs: THREE.Texture[] = [];
+    loadCamTextures(cams.cameras).then((t) => {
+      if (!alive) { t.forEach((x) => x.dispose()); return; }
+      texs = t;
+      setProjMat(buildProjectiveMaterial(cams.cameras, t));
+    });
+    return () => { alive = false; texs.forEach((x) => x.dispose()); };
+  }, [cams, textured]);
+  useEffect(() => () => projMat?.dispose(), [projMat]);
+
+  const dimMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: new THREE.Color("#3a4048"), roughness: 1, metalness: 0, side: THREE.DoubleSide,
+  }), []);
+  useEffect(() => () => dimMat.dispose(), [dimMat]);
+
+  if (!geom) return null;
+  return <mesh geometry={geom} material={projMat && textured ? projMat : dimMat} />;
 }
 
 function Observed({ fs }: { fs: FreeSpace | null }) {
@@ -104,9 +172,10 @@ function Corridor({ fs }: { fs: FreeSpace | null }) {
   );
 }
 
-export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured, showSplat, scene }: {
-  mesh: Meshed | null; colors: Float32Array | null; cams: Cams | null; fs: FreeSpace | null;
-  showMesh: boolean; textured: boolean; showSplat: boolean; scene: string;
+export function FreeSpaceScene({ mesh, colors, debris, cams, ground, idx, fs, showMesh, textured, showGround, showDebris, showSplat, scene }: {
+  mesh: Meshed | null; colors: Float32Array | null; debris: Uint8Array | null; cams: Cams | null;
+  ground: Ground | null; idx: OccIndex | null; fs: FreeSpace | null;
+  showMesh: boolean; textured: boolean; showGround: boolean; showDebris: boolean; showSplat: boolean; scene: string;
 }) {
   return (
     <Canvas dpr={[1, 2]} style={{ background: "#0b0d12" }}>
@@ -127,7 +196,8 @@ export function FreeSpaceScene({ mesh, colors, cams, fs, showMesh, textured, sho
         <meshBasicMaterial color="#00e676" wireframe />
       </mesh>
       <axesHelper args={[3]} />
-      <MeshObject mesh={mesh} colors={colors} cams={cams} showMesh={showMesh} textured={textured} />
+      {showGround && <GroundMesh ground={ground} idx={idx} cams={cams} textured={textured} />}
+      <MeshObject mesh={mesh} colors={colors} debris={debris} cams={cams} showMesh={showMesh} textured={textured} showDebris={showDebris} />
       {/* image-based gsplat reconstruction; global->ego0 alignment baked into the .splat bytes so it
           renders at identity, sharing the makeDefault camera + OrbitControls. Availability (asset
           present) is gated by the caller via showSplat (meta-detected), so no 404 crash. */}
