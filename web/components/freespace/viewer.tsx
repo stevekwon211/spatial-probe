@@ -82,6 +82,7 @@ export function FreeSpaceViewer() {
         <ToggleGroup value={[algo]} onValueChange={(v: string[]) => { if (v[0]) setAlgo(v[0] as Algo); }} variant="outline" size="sm">
           <ToggleGroupItem value="qef" className="font-mono text-xs">qef-MDC (sharp)</ToggleGroupItem>
           <ToggleGroupItem value="nets" className="font-mono text-xs">surface-nets</ToggleGroupItem>
+          <ToggleGroupItem value="blocky" className="font-mono text-xs" title="each 0.4m voxel as a cube — no smoothing, the honest grid (field standard for occupancy QA)">blocky (honest)</ToggleGroupItem>
         </ToggleGroup>
 
         <Button variant={showMesh ? "secondary" : "ghost"} size="sm" onClick={() => setShowMesh((v) => !v)}>mesh</Button>
