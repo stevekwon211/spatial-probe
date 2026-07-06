@@ -34,6 +34,11 @@ RANGE = ((-40.0, 40.0), (-40.0, 40.0), (-1.0, 5.4))
 VS = 0.2
 MOVER_MPS = 0.5   # a box faster than this is dynamic -> its points ghost -> remove
 BOX_MARGIN = 0.1  # m, grow the box slightly to catch edge returns
+MIN_RETURNS = 2   # a cell needs >=this many returns over the 39 sweeps to count as a real surface. A
+                  # single return is almost always noise (dust/exhaust/multi-echo/spurious) or a dynamic
+                  # leftover -> the mid-air floaters. Measured: 40% of cells are 1-return (69% of those
+                  # above 0.6m); real surfaces get hit many times (median 2, walls 10-3600). Honest: this
+                  # requires MORE evidence, it does not invent — an unconfirmed hit is dropped, not filled.
 
 
 def _q2r(q):
@@ -110,8 +115,10 @@ def reconstruct(scene: str, extr: dict) -> tuple[np.ndarray, dict]:
     gi = np.floor((pts - origin) / VS).astype(np.int64)
     m = (gi[:, 0] >= 0) & (gi[:, 0] < nx) & (gi[:, 1] >= 0) & (gi[:, 1] < ny) & (gi[:, 2] >= 0) & (gi[:, 2] < nz)
     gi = gi[m]
-    occ = np.zeros((nx, ny, nz), np.uint8)
-    occ[gi[:, 0], gi[:, 1], gi[:, 2]] = 1
+    # occupied = a cell confirmed by >=MIN_RETURNS returns (drops the single-return noise floaters)
+    lin = (gi[:, 0] * ny + gi[:, 1]) * nz + gi[:, 2]
+    cnt = np.bincount(lin, minlength=nx * ny * nz)
+    occ = (cnt >= MIN_RETURNS).reshape(nx, ny, nz).astype(np.uint8)
     dims = {
         "nx": nx, "ny": ny, "nz": nz, "voxel_size": VS,
         "origin": [origin[0] + VS / 2, origin[1] + VS / 2, origin[2] + VS / 2],  # voxel-0 CENTER (matches Occ3D convention)
