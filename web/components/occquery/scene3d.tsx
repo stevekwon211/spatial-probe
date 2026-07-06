@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { Grid, Line, OrbitControls, OrthographicCamera, PerspectiveCamera, Stats } from "@react-three/drei";
 import * as THREE from "three";
@@ -221,6 +221,7 @@ export function Scene3D({
   points,
   boxes,
   onGl,
+  children,
 }: {
   obstacles: Obstacle[];
   ego: { width: number; length: number; height: number };
@@ -229,6 +230,7 @@ export function Scene3D({
   points?: LidarPoint[] | null;
   boxes?: Box[] | null;
   onGl: (gl: THREE.WebGLRenderer) => void;
+  children?: ReactNode; // extra layers (e.g. the free-space geometry, frame-swapped into this Canvas)
 }) {
   const renderMode = useViewer((s) => s.renderMode);
   const showVoxels = useViewer((s) => s.showVoxels);
@@ -260,6 +262,7 @@ export function Scene3D({
         <Grid args={[80, 80]} cellSize={2} sectionSize={10} infiniteGrid fadeDistance={60} cellColor="#222" sectionColor="#333" />
       )}
       {showStats && <Stats />}
+      {children}
       <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
       <CameraController />
     </Canvas>

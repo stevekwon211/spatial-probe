@@ -1,6 +1,5 @@
-import { Explorer } from "@/components/occquery/explorer";
+import { OccqueryViewer } from "@/components/occquery/viewer";
 
-export default async function OccqueryPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
-  const { view } = await searchParams;
-  return <Explorer initialView={view === "geometry" ? "geometry" : "query"} />;
+export default function OccqueryPage() {
+  return <OccqueryViewer />;
 }

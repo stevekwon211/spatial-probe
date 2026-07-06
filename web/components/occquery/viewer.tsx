@@ -6,6 +6,9 @@ import type * as THREE from "three";
 import Link from "next/link";
 import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack, SkipForward, Sparkles } from "lucide-react";
 import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Box, type LidarPoint, type Obstacle, type ReachableField } from "./scene3d";
+import { FreeSpaceLayers } from "@/components/freespace/freespace-scene";
+import { useFreeSpaceGeometry } from "@/components/freespace/use-freespace-geometry";
+import { GeometryControls } from "@/components/freespace/geometry-controls";
 import { ControlPanel } from "./controls";
 import { useViewer, type RenderMode } from "./store";
 import { GlassPanel } from "./glass";
@@ -91,6 +94,10 @@ export function OccqueryViewer() {
   const [boxes, setBoxes] = useState<Box[] | null>(null);
   const [copied, setCopied] = useState(false);
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
+  // free-space GEOMETRY layers (mesh / blocky / LiDAR recon / ground / texture), overlaid in this same
+  // Canvas frame-swapped so it registers with the occquery voxels. One viewer, both representations.
+  const [showGeometry, setShowGeometry] = useState(false);
+  const geom = useFreeSpaceGeometry(scene);
   const cache = useRef<Map<string, { obstacles: Obstacle[]; boxes: Box[]; reachable: ReachableField | null }>>(new Map());
   const lidarCache = useRef<Map<string, LidarPoint[]>>(new Map());
 
@@ -243,7 +250,24 @@ export function OccqueryViewer() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#080808]">
-      {meta && <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} points={points} boxes={boxes} onGl={(gl) => (glRef.current = gl)} />}
+      {meta && (
+        <Scene3D obstacles={obstacles} ego={meta.ego} voxelSize={meta.voxel_size} reachable={reachable} points={points} boxes={boxes} onGl={(gl) => (glRef.current = gl)}>
+          {showGeometry && <FreeSpaceLayers {...geom.layers} />}
+        </Scene3D>
+      )}
+
+      {/* top-center — GEOMETRY overlay: the free-space mesh/blocky/LiDAR-recon/texture in the same scene */}
+      <div className="absolute left-1/2 top-3 z-30 -translate-x-1/2">
+        <GlassPanel className="flex items-center gap-2 px-2 py-1.5 text-white">
+          <button
+            onClick={() => setShowGeometry((v) => !v)}
+            className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", showGeometry ? "bg-white text-black" : "text-white/60 hover:text-white")}
+          >
+            Geometry
+          </button>
+          {showGeometry && <GeometryControls c={geom.controls} layers={geom.layers} splatMeta={geom.splatMeta} mesh={geom.mesh} />}
+        </GlassPanel>
+      </div>
 
       {/* top-left — context + view controls */}
       <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">

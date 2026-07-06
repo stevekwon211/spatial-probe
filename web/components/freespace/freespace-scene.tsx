@@ -181,11 +181,29 @@ function Corridor({ fs }: { fs: FreeSpace | null }) {
   );
 }
 
-export function FreeSpaceScene({ mesh, colors, debris, cams, ground, idx, fs, showMesh, textured, showGround, showDebris, occlude, showSplat, scene }: {
+export interface LayersProps {
   mesh: Meshed | null; colors: Float32Array | null; debris: Uint8Array | null; cams: Cams | null;
   ground: Ground | null; idx: OccIndex | null; fs: FreeSpace | null;
   showMesh: boolean; textured: boolean; showGround: boolean; showDebris: boolean; occlude: boolean; showSplat: boolean; scene: string;
-}) {
+}
+
+// The data layers (no camera/lights/canvas), so they can mount either in the free-space Canvas OR,
+// frame-swapped, inside the occquery Canvas (see FreeSpaceLayers).
+function Layers({ mesh, colors, debris, cams, ground, idx, fs, showMesh, textured, showGround, showDebris, occlude, showSplat, scene }: LayersProps) {
+  return (
+    <>
+      {showGround && <GroundMesh ground={ground} idx={idx} cams={cams} textured={textured} />}
+      <MeshObject mesh={mesh} colors={colors} debris={debris} cams={cams} showMesh={showMesh} textured={textured} showDebris={showDebris} occlude={occlude} />
+      {/* image-based gsplat reconstruction; global->ego0 alignment baked into the .splat bytes so it
+          renders at identity, sharing the scene camera. Availability gated by the caller via showSplat. */}
+      {showSplat && <Splat src={`/gsplat/${scene}/gsplat.splat`} alphaTest={0.1} />}
+      <Observed fs={fs} />
+      <Corridor fs={fs} />
+    </>
+  );
+}
+
+export function FreeSpaceScene(props: LayersProps) {
   return (
     <Canvas dpr={[1, 2]} style={{ background: "#0b0d12" }}>
       <PerspectiveCamera makeDefault position={[-22, -20, 16]} up={[0, 0, 1]} fov={55} far={2000} />
@@ -205,14 +223,35 @@ export function FreeSpaceScene({ mesh, colors, debris, cams, ground, idx, fs, sh
         <meshBasicMaterial color="#00e676" wireframe />
       </mesh>
       <axesHelper args={[3]} />
-      {showGround && <GroundMesh ground={ground} idx={idx} cams={cams} textured={textured} />}
-      <MeshObject mesh={mesh} colors={colors} debris={debris} cams={cams} showMesh={showMesh} textured={textured} showDebris={showDebris} occlude={occlude} />
-      {/* image-based gsplat reconstruction; global->ego0 alignment baked into the .splat bytes so it
-          renders at identity, sharing the makeDefault camera + OrbitControls. Availability (asset
-          present) is gated by the caller via showSplat (meta-detected), so no 404 crash. */}
-      {showSplat && <Splat src={`/gsplat/${scene}/gsplat.splat`} alphaTest={0.1} />}
-      <Observed fs={fs} />
-      <Corridor fs={fs} />
+      <Layers {...props} />
     </Canvas>
+  );
+}
+
+// nuScenes ego frame embedded two ways: free-space uses three (x,y,z)=(forward,left,UP), occquery uses
+// (forward,UP,left). Swapping y<->z re-embeds the SAME physical scene into occquery's Y-up canvas.
+const YZ_SWAP = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+// the projective shader does Rt·(vWorld − t) in the free-space frame; if vWorld is now occquery-frame we
+// must feed it Rt·M and M·t (M=YZ swap, self-inverse) so the same pixel is sampled. Swap Rt columns 1,2
+// (row-major -> indices 1<->2, 4<->5, 7<->8) and t.y<->t.z.
+function swapCams(cams: Cams | null): Cams | null {
+  if (!cams) return null;
+  return {
+    cameras: cams.cameras.map((c) => ({
+      ...c,
+      t: [c.t[0], c.t[2], c.t[1]],
+      Rt: [c.Rt[0], c.Rt[2], c.Rt[1], c.Rt[3], c.Rt[5], c.Rt[4], c.Rt[6], c.Rt[8], c.Rt[7]],
+    })),
+  };
+}
+
+// The free-space geometry mounted INSIDE the occquery Canvas (Y-up): re-embed via YZ_SWAP so it overlays
+// the occquery voxels/boxes exactly, and feed the projective texture frame-swapped camera params.
+export function FreeSpaceLayers(props: LayersProps) {
+  const cams = useMemo(() => swapCams(props.cams), [props.cams]);
+  return (
+    <group matrixAutoUpdate={false} matrix={YZ_SWAP}>
+      <Layers {...props} cams={cams} />
+    </group>
   );
 }

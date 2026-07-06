@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Free-Space is no longer a separate page — it is the Geometry view of the one Explorer.
+// Free-Space is no longer a page — the geometry is the "Geometry" overlay inside the one Explorer.
 export default function FreeSpacePage() {
-  redirect("/occquery?view=geometry");
+  redirect("/occquery");
 }
