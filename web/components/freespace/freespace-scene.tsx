@@ -8,17 +8,20 @@ import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.j
 import type { Meshed } from "./mdc-client";
 import type { FreeSpace, Cams, Ground, OccIndex } from "./data";
 import { buildGroundGeometry } from "./data";
-import { buildProjectiveMaterial, loadCamTextures } from "./projective";
+import { buildProjectiveMaterial, loadCamTextures, cameraVisibility } from "./projective";
 
 // nuScenes ego frame: x-forward, y-left, z-up. We keep those axes and set the camera up to +z, so
 // the free-space plane reads as the ground (matches the occquery viewer's ego convention).
 const CORRIDOR_COLOR = { free: 0x22c55e, unknown: 0xf59e0b, blocked: 0xef4444 } as const;
 
-function MeshObject({ mesh, colors, debris, cams, showMesh, textured, showDebris }: {
+function MeshObject({ mesh, colors, debris, cams, showMesh, textured, showDebris, occlude }: {
   mesh: Meshed | null; colors: Float32Array | null; debris: Uint8Array | null; cams: Cams | null;
-  showMesh: boolean; textured: boolean; showDebris: boolean;
+  showMesh: boolean; textured: boolean; showDebris: boolean; occlude: boolean;
 }) {
   const useColor = textured && !!colors && colors.length === (mesh?.pos.length ?? -1);
+  // Per-vertex, per-camera visibility for the honest occlusion test (CPU depth pre-pass). Computed once
+  // per (mesh, cams); fed to the projective shader as aVisA/aVisB and gated by the occlude toggle.
+  const vis = useMemo(() => (mesh && cams?.cameras?.length ? cameraVisibility(mesh.pos, cams.cameras) : null), [mesh, cams]);
   // Split the mesh into a SOLID part and a DEBRIS part (triangles whose 3 verts all belong to a tiny
   // isolated component — the floating-island snowstorm). Nothing is deleted; the debris part just
   // renders faded by default so a reviewer can still un-fade and inspect it. A triangle is debris only
@@ -44,11 +47,15 @@ function MeshObject({ mesh, colors, debris, cams, showMesh, textured, showDebris
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.BufferAttribute(mesh.pos, 3));
       g.setAttribute("color", new THREE.BufferAttribute(vcol!, 3));
+      if (vis) { // occlusion pre-pass visibility (carried through the creased de-index)
+        g.setAttribute("aVisA", new THREE.BufferAttribute(vis.visA, 3));
+        g.setAttribute("aVisB", new THREE.BufferAttribute(vis.visB, 3));
+      }
       g.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
       return toCreasedNormals(g, THREE.MathUtils.degToRad(30));
     };
     return { solid: make(solidIdx), debris: make(debrisIdx) };
-  }, [mesh, colors, debris]);
+  }, [mesh, colors, debris, vis]);
   useEffect(() => () => { geoms?.solid?.dispose(); geoms?.debris?.dispose(); }, [geoms]);
 
   // Render-time projective texturing (full-res camera images) when textured + cams available.
@@ -64,6 +71,8 @@ function MeshObject({ mesh, colors, debris, cams, showMesh, textured, showDebris
     return () => { alive = false; texs.forEach((x) => x.dispose()); };
   }, [cams, textured]);
   useEffect(() => () => projMat?.dispose(), [projMat]);
+  // honest occlusion test: on only when the toggle is set AND we have the pre-pass visibility.
+  useEffect(() => { if (projMat) projMat.uniforms.uOcclude.value = occlude && vis ? 1 : 0; }, [projMat, occlude, vis]);
 
   // Imperative shaded material: declaring <meshStandardMaterial> with a dynamic vertexColors flag does
   // NOT reconcile in R3F (the compiled program is cached, so toggling projected->shaded kept rendering
@@ -172,10 +181,10 @@ function Corridor({ fs }: { fs: FreeSpace | null }) {
   );
 }
 
-export function FreeSpaceScene({ mesh, colors, debris, cams, ground, idx, fs, showMesh, textured, showGround, showDebris, showSplat, scene }: {
+export function FreeSpaceScene({ mesh, colors, debris, cams, ground, idx, fs, showMesh, textured, showGround, showDebris, occlude, showSplat, scene }: {
   mesh: Meshed | null; colors: Float32Array | null; debris: Uint8Array | null; cams: Cams | null;
   ground: Ground | null; idx: OccIndex | null; fs: FreeSpace | null;
-  showMesh: boolean; textured: boolean; showGround: boolean; showDebris: boolean; showSplat: boolean; scene: string;
+  showMesh: boolean; textured: boolean; showGround: boolean; showDebris: boolean; occlude: boolean; showSplat: boolean; scene: string;
 }) {
   return (
     <Canvas dpr={[1, 2]} style={{ background: "#0b0d12" }}>
@@ -197,7 +206,7 @@ export function FreeSpaceScene({ mesh, colors, debris, cams, ground, idx, fs, sh
       </mesh>
       <axesHelper args={[3]} />
       {showGround && <GroundMesh ground={ground} idx={idx} cams={cams} textured={textured} />}
-      <MeshObject mesh={mesh} colors={colors} debris={debris} cams={cams} showMesh={showMesh} textured={textured} showDebris={showDebris} />
+      <MeshObject mesh={mesh} colors={colors} debris={debris} cams={cams} showMesh={showMesh} textured={textured} showDebris={showDebris} occlude={occlude} />
       {/* image-based gsplat reconstruction; global->ego0 alignment baked into the .splat bytes so it
           renders at identity, sharing the makeDefault camera + OrbitControls. Availability (asset
           present) is gated by the caller via showSplat (meta-detected), so no 404 crash. */}

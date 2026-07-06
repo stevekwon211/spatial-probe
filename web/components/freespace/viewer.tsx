@@ -22,6 +22,7 @@ export function FreeSpaceViewer() {
   const [textured, setTextured] = useState(true);
   const [showGround, setShowGround] = useState(true);
   const [showDebris, setShowDebris] = useState(false);
+  const [occlude, setOcclude] = useState(false);
   const [showSplat, setShowSplat] = useState(false);
   const [mesh, setMesh] = useState<Meshed | null>(null);
   const [colors, setColors] = useState<Float32Array | null>(null);
@@ -99,6 +100,11 @@ export function FreeSpaceViewer() {
           title="tiny isolated components (≤3 voxels, short) — faded as likely noise by default; toggle to inspect (nothing deleted)">
           debris
         </Button>
+        <Button variant={occlude ? "secondary" : "ghost"} size="sm" onClick={() => setOcclude((v) => !v)}
+          disabled={!cams || !textured}
+          title="honest occlusion: only texture a face a camera actually sees (depth pre-pass). Kills front-wall bleed but leaves most of the mesh blue — most surface is unseen by the 6 clustered cameras">
+          occlude
+        </Button>
         <Button variant={showSplat && splatMeta ? "secondary" : "ghost"} size="sm" onClick={() => setShowSplat((v) => !v)}
           disabled={!splatMeta}
           title={splatMeta ? `image-based 3D Gaussian splat (${splatMeta.count.toLocaleString()}, photoreal)` : "no splat asset for this scene"}>
@@ -126,7 +132,7 @@ export function FreeSpaceViewer() {
       {/* scene + honest-gap */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[1fr_20rem]">
         <div className="min-h-0 overflow-hidden rounded-xl border">
-          <FreeSpaceScene mesh={mesh} colors={colors} debris={debris} cams={cams} ground={ground} idx={idx} fs={fs} showMesh={showMesh} textured={textured} showGround={showGround} showDebris={showDebris} showSplat={showSplat && !!splatMeta} scene={scene} />
+          <FreeSpaceScene mesh={mesh} colors={colors} debris={debris} cams={cams} ground={ground} idx={idx} fs={fs} showMesh={showMesh} textured={textured} showGround={showGround} showDebris={showDebris} occlude={occlude} showSplat={showSplat && !!splatMeta} scene={scene} />
         </div>
         <div className="flex flex-col gap-3">
           <Card>
@@ -147,7 +153,8 @@ export function FreeSpaceViewer() {
               qef-MDC는 EDT→SDF→QEF로 각진 구조를 코너에 얹고, <b className="text-foreground">defects</b>는 아직 non-manifold인 셀 수(정직한 QA 신호).
               <span className="mt-1.5 block"><b className="text-foreground">ground</b>는 FREE로 분류돼 메시엔 없던 주행가능 노면(도로/인도/지형)을 별도 레이어로 되살린 것. Occ3D가
               물체 밑 노면은 라벨 안 해서 차·장애물 둘레는 <b className="text-foreground">진짜 구멍</b> — 그래서 물체가 정직하게 떠 보이는 게 맞음(바닥에 붙였다고 거짓말 안 함).
-              <b className="text-foreground">debris</b>는 ≤3복셀 고립 조각(노이즈 추정) — 지우지 않고 흐리게, 토글로 되살려 검수 가능(희소 GT는 진짜 차도 조각내서 삭제하면 실물이 사라짐).</span>
+              <b className="text-foreground">debris</b>는 ≤3복셀 고립 조각(노이즈 추정) — 지우지 않고 흐리게, 토글로 되살려 검수 가능(희소 GT는 진짜 차도 조각내서 삭제하면 실물이 사라짐).
+              <b className="text-foreground"> occlude</b>는 카메라별 depth로 실제로 본 면만 텍스처 — 앞벽 픽셀이 뒷면에 새던 것(면의 ~67%가 가려짐) 차단. 밝고 또렷=카메라가 검증, 어둑=못 본 추측. 기본 OFF.</span>
               {splatMeta && <span className="mt-1.5 block"><b className="text-foreground">splat</b>은 같은 씬을 카메라 234장으로 복원한 <b className="text-foreground">{splatMeta.count.toLocaleString()} Gaussian</b>
               (floater {splatMeta.preCull.toLocaleString()}개서 컬링, sub-voxel). 복셀=정직·거침(unknown 라벨), splat=실사·추측(라벨 없음, 헛것 위험) — 목적이 다름. 뿌연 건 under-trained + 동적객체 ghost.</span>}
             </CardContent>
