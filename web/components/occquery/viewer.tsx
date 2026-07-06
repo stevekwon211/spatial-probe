@@ -8,7 +8,7 @@ import { Camera, Check, ChevronLeft, Download, Pause, Play, RotateCcw, SkipBack,
 import { CLASS_NAMES, SEMANTIC_COLORS, Scene3D, type Box, type LidarPoint, type Obstacle, type ReachableField } from "./scene3d";
 import { FreeSpaceLayers } from "@/components/freespace/freespace-scene";
 import { useFreeSpaceGeometry } from "@/components/freespace/use-freespace-geometry";
-import { GeometryControls } from "@/components/freespace/geometry-controls";
+import { GeometrySection } from "@/components/freespace/geometry-controls";
 import { ControlPanel } from "./controls";
 import { useViewer, type RenderMode } from "./store";
 import { GlassPanel } from "./glass";
@@ -256,19 +256,6 @@ export function OccqueryViewer() {
         </Scene3D>
       )}
 
-      {/* top-center — GEOMETRY overlay: the free-space mesh/blocky/LiDAR-recon/texture in the same scene */}
-      <div className="absolute left-1/2 top-3 z-30 -translate-x-1/2">
-        <GlassPanel className="flex items-center gap-2 px-2 py-1.5 text-white">
-          <button
-            onClick={() => setShowGeometry((v) => !v)}
-            className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", showGeometry ? "bg-white text-black" : "text-white/60 hover:text-white")}
-          >
-            Geometry
-          </button>
-          {showGeometry && <GeometryControls c={geom.controls} layers={geom.layers} splatMeta={geom.splatMeta} mesh={geom.mesh} />}
-        </GlassPanel>
-      </div>
-
       {/* top-left — context + view controls */}
       <GlassPanel className="absolute top-4 bottom-4 left-4 flex w-72 flex-col text-white">
         <div className="flex items-center justify-between px-3 pt-3 pb-2">
@@ -349,8 +336,9 @@ export function OccqueryViewer() {
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 pb-3">
           {colorMode === "semantic" && <Legend obstacles={obstacles} />}
+          <GeometrySection showGeometry={showGeometry} setShowGeometry={setShowGeometry} c={geom.controls} layers={geom.layers} splatMeta={geom.splatMeta} mesh={geom.mesh} />
           <ControlPanel />
         </div>
       </GlassPanel>
