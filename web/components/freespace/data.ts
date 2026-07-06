@@ -60,6 +60,16 @@ export async function fetchOccGrid(scene: string, idx: OccIndex): Promise<OccGri
   return { occ, nx: idx.nx, ny: idx.ny, nz: idx.nz, vs: idx.voxel_size, origin: idx.origin };
 }
 
+/** The honest finer reconstruction: 0.2m surface-hit occupancy from ALL 39 keyframe LiDAR sweeps
+ * accumulated (ego-motion aligned) with moving objects removed (box tracks). 2x finer than Occ3D, every
+ * cell a real return. Own dims sidecar (400x400x32). null if not prepped for this scene. */
+export async function fetchLidarOcc(scene: string): Promise<OccGrid | null> {
+  const [rb, rj] = await Promise.all([fetch(`/occ/${scene}.lidar02.occ.bin`), fetch(`/occ/${scene}.lidar02.json`)]);
+  if (!rb.ok || !rj.ok) return null;
+  const d = await rj.json();
+  return { occ: new Uint8Array(await rb.arrayBuffer()), nx: d.nx, ny: d.ny, nz: d.nz, vs: d.voxel_size, origin: d.origin };
+}
+
 /** Per-voxel RGB (uint8, [x*ny*nz+y*nz+z]*3) — the camera-projective color. */
 export async function fetchColor(scene: string): Promise<Uint8Array | null> {
   const r = await fetch(`/occ/${scene}.color.bin`);

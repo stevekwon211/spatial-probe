@@ -9,3 +9,5 @@
 # projective-texturing camera images + params (derived from gitignored data/samples, local-only)
 /public/occ/cams/
 /public/occ/*.cams.json
+# LiDAR-accumulated reconstruction dims sidecar (the .bin is covered by *.bin; both derived, local-only)
+/public/occ/*.lidar02.json

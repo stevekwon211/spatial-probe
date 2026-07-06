@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FreeSpaceScene } from "./freespace-scene";
-import { fetchIndex, fetchFreespace, fetchOccGrid, fetchColor, fetchCams, fetchGround, fetchSplatMeta, vertexColors, debrisFlags, type FreeSpace, type OccIndex, type Cams, type Ground, type SplatMeta } from "./data";
+import { fetchIndex, fetchFreespace, fetchOccGrid, fetchLidarOcc, fetchColor, fetchCams, fetchGround, fetchSplatMeta, vertexColors, debrisFlags, type FreeSpace, type OccIndex, type Cams, type Ground, type SplatMeta } from "./data";
 import { meshOccupancy, modelSdf, type Algo, type Meshed } from "./mdc-client";
 
 // Free-space review: the "honest occupancy" view. Aggregated Occ3D -> a Rust/WASM QEF-MDC surface
@@ -18,6 +18,7 @@ export function FreeSpaceViewer() {
   const [idx, setIdx] = useState<OccIndex | null>(null);
   const [scene, setScene] = useState("");
   const [algo, setAlgo] = useState<Algo>("qef");
+  const [source, setSource] = useState<"occ3d" | "lidar">("occ3d");
   const [showMesh, setShowMesh] = useState(true);
   const [textured, setTextured] = useState(true);
   const [showGround, setShowGround] = useState(true);
@@ -40,20 +41,24 @@ export function FreeSpaceViewer() {
     let cancelled = false;
     setBusy(true); setMesh(null); setFs(null); setColors(null); setDebris(null); setCams(null); setGround(null); setSplatMeta(null);
     (async () => {
-      const [f, g, col, cm, gr, sm] = await Promise.all([
-        fetchFreespace(scene), fetchOccGrid(scene, idx), fetchColor(scene), fetchCams(scene), fetchGround(scene, idx), fetchSplatMeta(scene),
+      const [f, col, cm, gr, sm] = await Promise.all([
+        fetchFreespace(scene), fetchColor(scene), fetchCams(scene), fetchGround(scene, idx), fetchSplatMeta(scene),
       ]);
+      // obstacle grid: 0.4m Occ3D, or the 0.2m LiDAR-accumulated reconstruction (own dims)
+      const g = source === "lidar" ? await fetchLidarOcc(scene) : await fetchOccGrid(scene, idx);
       if (cancelled) return;
       setFs(f); setCams(cm); setGround(gr); setSplatMeta(sm);
+      if (!g) { setBusy(false); return; } // lidar recon not prepped for this scene
       const m = await meshOccupancy(g, algo);
       if (cancelled) return;
       setMesh(m);
-      setColors(col ? vertexColors(m.pos, col, idx) : null); // per-voxel fallback color
+      // per-voxel color only exists for the 0.4m grid; the LiDAR mesh is textured live by the cameras
+      setColors(source === "lidar" ? null : (col ? vertexColors(m.pos, col, idx) : null));
       setDebris(debrisFlags(m.pos, g));                       // tiny-isolated-component fade flags
       setBusy(false);
     })().catch(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
-  }, [scene, algo, idx]);
+  }, [scene, algo, idx, source]);
 
   async function exportSdf() {
     if (!scene || !idx) return;
@@ -82,7 +87,12 @@ export function FreeSpaceViewer() {
         <ToggleGroup value={[algo]} onValueChange={(v: string[]) => { if (v[0]) setAlgo(v[0] as Algo); }} variant="outline" size="sm">
           <ToggleGroupItem value="qef" className="font-mono text-xs">qef-MDC (sharp)</ToggleGroupItem>
           <ToggleGroupItem value="nets" className="font-mono text-xs">surface-nets</ToggleGroupItem>
-          <ToggleGroupItem value="blocky" className="font-mono text-xs" title="each 0.4m voxel as a cube — no smoothing, the honest grid (field standard for occupancy QA)">blocky (honest)</ToggleGroupItem>
+          <ToggleGroupItem value="blocky" className="font-mono text-xs" title="each voxel as a cube — no smoothing, the honest grid (field standard for occupancy QA)">blocky (honest)</ToggleGroupItem>
+        </ToggleGroup>
+
+        <ToggleGroup value={[source]} onValueChange={(v: string[]) => { if (v[0]) setSource(v[0] as "occ3d" | "lidar"); }} variant="outline" size="sm">
+          <ToggleGroupItem value="occ3d" className="font-mono text-xs" title="Occ3D 0.4m occupancy GT (3-state, coarse summary)">0.4m occ3d</ToggleGroupItem>
+          <ToggleGroupItem value="lidar" className="font-mono text-xs" title="0.2m reconstruction — all 39 LiDAR sweeps accumulated (ego-motion aligned) + movers removed. 2x finer, every cell a real return">0.2m lidar</ToggleGroupItem>
         </ToggleGroup>
 
         <Button variant={showMesh ? "secondary" : "ghost"} size="sm" onClick={() => setShowMesh((v) => !v)}>mesh</Button>
