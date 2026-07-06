@@ -76,7 +76,7 @@ export const PIPELINE: Stage[] = [
           "Occupancy meshed to a legible surface (Rust/WASM QEF dual contouring) with a single-sweep corridor showing what one frame can and cannot verify — honest free-space review.",
         status: "in-progress",
         statusLabel: "QEF-MDC mesh · honest corridor",
-        href: "/freespace",
+        href: "/occquery?view=geometry",
       },
     ],
   },
