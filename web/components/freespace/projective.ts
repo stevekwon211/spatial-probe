@@ -49,10 +49,13 @@ const FRAG = /* glsl */ `
     float u = K.x * pc.x / pc.z + K.z;
     float v = K.y * pc.y / pc.z + K.w;
     if (u < 0.0 || u >= uRes.x || v < 0.0 || v >= uRes.y) return vec4(0.0);
-    float f = dot(n, normalize(t - vWorld));             // facing this camera?
-    if (f <= 0.05) return vec4(0.0);                     // front-face gate (cheap occlusion proxy)
+    float f = dot(n, normalize(t - vWorld));             // incidence: how head-on this camera sees the surface
+    if (f <= 0.15) return vec4(0.0);                     // reject grazing views — a near-horizontal ray
+                                                          // stretches one image column into a long smear
+                                                          // (the "stretched road" streaks); fall back instead
     vec3 c = texture2D(tex, vec2(u / uRes.x, v / uRes.y)).rgb;
-    return vec4(c * f, f);
+    float w = f * f;                                      // steeper weight: head-on views dominate the blend
+    return vec4(c * w, w);
   }
 
   void main() {

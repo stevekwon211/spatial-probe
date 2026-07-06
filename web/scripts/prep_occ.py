@@ -201,6 +201,22 @@ def ground_heightfield(scene_frames, root):
     sub = np.zeros((nx, ny), np.uint8)
     ix, iy = np.where(top >= 0)
     sub[ix, iy] = lut[sem[ix, iy, top[ix, iy]]]
+
+    # Fill tiny drivable PINHOLES: a no-ground cell that is NOT under an obstacle and is ringed by ground
+    # on >=5 of its 8 neighbours is a GT labeling gap, not a real hole — set it to the max neighbour height
+    # so the road reads continuous. Only pinholes: obstacle-footprint holes and big gaps stay honest.
+    from scipy import ndimage
+    obst_bev = (~np.isin(sem, [11, 12, 13, 14, 17])).any(axis=2)  # any non-ground, non-free class in the column
+    k = np.ones((3, 3), np.int8)
+    for _ in range(2):
+        g = hz != 255
+        ncount = ndimage.convolve(g.astype(np.int8), k, mode="constant") - g.astype(np.int8)
+        fillable = (~g) & (~obst_bev) & (ncount >= 5)
+        if not fillable.any():
+            break
+        nb_h = ndimage.grey_dilation(np.where(g, hz, 0).astype(np.uint8), size=(3, 3))
+        hz[fillable] = nb_h[fillable]
+        sub[fillable] = 1
     return np.ascontiguousarray(hz), np.ascontiguousarray(sub)
 
 
