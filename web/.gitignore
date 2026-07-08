@@ -1,6 +1,9 @@
 .vercel
 /.next
 /node_modules
+# local env — secrets (Vercel/Turbo tokens); never commit
+.env
+.env*.local
 # 381MB occquery 3D-viewer scene data — never commit (degrades gracefully on Vercel)
 /public/data/occquery
 # The small Aletheon demo frame images ARE committed (CDN static, ~744KB, referenced as /data/frames/*)
