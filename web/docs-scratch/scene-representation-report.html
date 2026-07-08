@@ -1,0 +1,899 @@
+<title>Scene representation & texture — mini-PRISM</title>
+<style>
+  :root {
+    --ink: #0B0E13;
+    --ink-2: #1A2029;
+    --paper: #F5F6F4;
+    --paper-2: #ECEEEA;
+    --slate: #5B6B7A;
+    --slate-2: #8A97A2;
+    --line: #D5D9D3;
+    --line-2: #C2C8C0;
+    --signal: #C7502E;
+    --signal-soft: #F0E0DA;
+    /* honesty tiers — semantic, separable from accent */
+    --measured: #2E7D6B;
+    --measured-bg: #E3EFEB;
+    --inferred: #B8892B;
+    --inferred-bg: #F3EAD6;
+    --speculative: #7A6BA8;
+    --speculative-bg: #EAE6F1;
+
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+    --measure: 68ch;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 0 28px 120px;
+  }
+
+  /* ---------- MASTHEAD ---------- */
+  .masthead {
+    padding: 68px 0 40px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--slate);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .kicker .dot { width: 4px; height: 4px; background: var(--signal); border-radius: 50%; display: inline-block; }
+  h1 {
+    font-size: clamp(30px, 5vw, 50px);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    font-weight: 680;
+    margin: 22px 0 0;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  h1 em { font-style: normal; color: var(--signal); }
+  .standfirst {
+    margin: 26px 0 0;
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: var(--measure);
+  }
+  .standfirst strong { font-weight: 640; }
+  .meta-row {
+    margin-top: 30px;
+    display: flex;
+    gap: 26px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--slate);
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- HONESTY LEGEND (the load-bearing frame) ---------- */
+  .legend {
+    margin: 44px 0 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .tier {
+    border: 1px solid var(--line-2);
+    border-top: 3px solid var(--t);
+    background: var(--tbg);
+    padding: 16px 16px 18px;
+  }
+  .tier .name {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--t);
+    font-weight: 600;
+  }
+  .tier h3 { margin: 8px 0 6px; font-size: 16px; font-weight: 640; letter-spacing: -0.01em; }
+  .tier p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+  .tier.measured { --t: var(--measured); --tbg: var(--measured-bg); }
+  .tier.inferred { --t: var(--inferred); --tbg: var(--inferred-bg); }
+  .tier.speculative { --t: var(--speculative); --tbg: var(--speculative-bg); }
+
+  /* ---------- SECTION SCAFFOLD ---------- */
+  section { margin-top: 68px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--line-2); padding-bottom: 12px; }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--signal);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .sec-head h2 {
+    font-size: clamp(22px, 3.2vw, 30px);
+    letter-spacing: -0.018em;
+    font-weight: 660;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede { max-width: var(--measure); font-size: 16.5px; color: var(--ink-2); }
+  .lede.pull { margin-top: 22px; }
+
+  p { max-width: var(--measure); }
+  strong { font-weight: 640; }
+  a { color: var(--signal); text-underline-offset: 2px; }
+
+  /* inline code / repo refs */
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink-2);
+  }
+
+  /* ---------- FAILURE CARDS ---------- */
+  .fail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 30px; }
+  .fail {
+    border: 1px solid var(--line-2);
+    background: #fff;
+    padding: 20px 20px 22px;
+  }
+  .fail .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--signal);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .fail .tag::before { content: ""; width: 7px; height: 7px; background: var(--signal); display: inline-block; }
+  .fail h4 { margin: 12px 0 8px; font-size: 16.5px; font-weight: 640; letter-spacing: -0.01em; }
+  .fail p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-2); max-width: none; }
+  .fail p + p { margin-top: 10px; }
+  .fail .measure {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--slate);
+    border-top: 1px dashed var(--line-2);
+    padding-top: 10px;
+    line-height: 1.5;
+  }
+  .fail .measure b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- DIAGRAM FRAME ---------- */
+  .figure { margin: 40px 0 0; }
+  .figure svg { display: block; width: 100%; height: auto; }
+  .figure figcaption {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--slate);
+    margin-top: 14px;
+    line-height: 1.5;
+    max-width: var(--measure);
+  }
+  .figure figcaption b { color: var(--ink); }
+
+  /* ---------- OPTION MATRIX ---------- */
+  .matrix-scroll { overflow-x: auto; margin-top: 30px; border: 1px solid var(--line-2); }
+  table.matrix {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 760px;
+    font-size: 13.5px;
+  }
+  table.matrix th, table.matrix td {
+    text-align: left;
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  table.matrix thead th {
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 500;
+    position: sticky;
+    top: 0;
+  }
+  table.matrix tbody tr:hover { background: var(--paper-2); }
+  table.matrix .rep {
+    font-weight: 620;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+    min-width: 172px;
+  }
+  table.matrix .rep small {
+    display: block;
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--slate);
+    letter-spacing: 0;
+    margin-top: 3px;
+  }
+  table.matrix td.cell { color: var(--ink-2); line-height: 1.4; }
+  /* role stripe on the left of each row */
+  tr[data-role] td:first-child { border-left: 3px solid var(--rolec); }
+  tr[data-role="qa"]      { --rolec: var(--measured); }
+  tr[data-role="legible"] { --rolec: var(--inferred); }
+  tr[data-role="photo"]   { --rolec: var(--speculative); }
+  tr[data-role="reject"]  { --rolec: var(--signal); }
+  tr[data-role="reject"] .rep { color: var(--slate); text-decoration: line-through; text-decoration-color: var(--signal); text-decoration-thickness: 1px; }
+
+  /* rating chips */
+  .chip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 2px;
+    border: 1px solid var(--cc, var(--line-2));
+    color: var(--ct, var(--ink-2));
+    background: var(--cbg, transparent);
+    white-space: nowrap;
+    line-height: 1.5;
+  }
+  .chip.hi   { --ct: #1E5C4E; --cbg: var(--measured-bg); --cc: #9CC3B8; }
+  .chip.mid  { --ct: #8A6414; --cbg: var(--inferred-bg); --cc: #D8BE86; }
+  .chip.lo   { --ct: #9A3E22; --cbg: var(--signal-soft); --cc: #E0B4A6; }
+  .chip.na   { --ct: var(--slate); --cbg: transparent; --cc: var(--line-2); }
+  .chip.web  { --ct: var(--ink); --cbg: var(--paper-2); --cc: var(--line-2); }
+
+  /* ---------- RECOMMENDATION STACK ---------- */
+  .rec-lead {
+    margin-top: 30px;
+    border-left: 3px solid var(--signal);
+    background: var(--signal-soft);
+    padding: 20px 22px;
+    max-width: var(--measure);
+  }
+  .rec-lead p { margin: 0; max-width: none; font-size: 15.5px; }
+  .rec-lead strong { color: var(--ink); }
+
+  .horizon-label {
+    display: flex; align-items: baseline; gap: 12px;
+    margin: 46px 0 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--slate);
+  }
+  .horizon-label .badge {
+    font-weight: 600;
+    color: var(--paper);
+    background: var(--ink);
+    padding: 3px 9px;
+    letter-spacing: 0.08em;
+  }
+  .horizon-label h3 { font-family: var(--sans); font-size: 20px; letter-spacing: -0.015em; text-transform: none; color: var(--ink); margin: 0; font-weight: 650; }
+
+  .steps { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .step {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 18px;
+    border: 1px solid var(--line-2);
+    background: #fff;
+    padding: 18px 20px;
+  }
+  .step .rank {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--paper);
+    background: var(--rk, var(--ink));
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    letter-spacing: -0.02em;
+  }
+  .step[data-tier="measured"] .rank { --rk: var(--measured); }
+  .step[data-tier="inferred"] .rank { --rk: var(--inferred); }
+  .step[data-tier="speculative"] .rank { --rk: var(--speculative); }
+  .step .body h4 { margin: 0 0 4px; font-size: 16.5px; font-weight: 640; letter-spacing: -0.01em; }
+  .step .body h4 .where { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--slate); letter-spacing: 0.04em; text-transform: uppercase; margin-left: 8px; }
+  .step .body p { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--ink-2); max-width: none; }
+  .step .body .files { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .step .result {
+    margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--line-2);
+    font-size: 13px; color: var(--ink-2); line-height: 1.5;
+  }
+  .step .result b { color: var(--measured); font-weight: 640; }
+  .step .honesty { color: var(--inferred); font-weight: 640; }
+
+  /* scorecard mini */
+  .score { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .score .s {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--slate);
+    border: 1px solid var(--line-2); padding: 2px 8px; border-radius: 2px;
+    display: inline-flex; gap: 6px; align-items: center;
+  }
+  .score .s b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- CALLOUT / RULE ---------- */
+  .rule {
+    margin-top: 40px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 24px 26px;
+  }
+  .rule .lab {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--slate-2);
+  }
+  .rule p { margin: 10px 0 0; max-width: var(--measure); color: var(--paper); font-size: 16px; }
+  .rule strong { color: #fff; }
+  .rule .mono-line {
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: #DCE0DA;
+    border-top: 1px solid #2A323C;
+    padding-top: 14px;
+    line-height: 1.6;
+  }
+  .rule .mono-line span { color: var(--signal); }
+
+  /* ---------- SOURCES ---------- */
+  .sources { margin-top: 20px; columns: 2; column-gap: 32px; }
+  .sources li { break-inside: avoid; margin-bottom: 10px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); font-family: var(--mono); }
+  .sources li b { color: var(--ink); font-weight: 600; }
+  ul.plain { padding-left: 18px; }
+  ul.plain li { margin-bottom: 7px; }
+
+  .footnote { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line-2); font-family: var(--mono); font-size: 12px; color: var(--slate); line-height: 1.6; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+  @media (max-width: 720px) {
+    .legend { grid-template-columns: 1fr; }
+    .fail-grid { grid-template-columns: 1fr; }
+    .sources { columns: 1; }
+    .wrap { padding: 0 18px 90px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="kicker">
+      <span>mini-PRISM</span><span class="dot"></span>
+      <span>scene representation memo</span><span class="dot"></span>
+      <span>nuScenes · scene-0061</span><span class="dot"></span>
+      <span>2026-07-06</span>
+    </div>
+    <h1>Stop projecting texture at render time. <em>Bake it, and mark what no camera saw.</em></h1>
+    <p class="standfirst">
+      The grey ground is not a shader-tuning bug — it is two structural failures of forward-projecting a road from
+      cameras that sit at ego height. The fix is not to cover the grey. It is to <strong>texture exactly as far as a
+      camera actually looked, and render the rest as an honest gap.</strong> Below: why the current pipeline is capped,
+      the full option matrix, and a two-horizon pipeline you can ship this week.
+    </p>
+    <div class="meta-row">
+      <span>geometry rep <b>× </b>texture method</span>
+      <span>layers <b>3 trust tiers</b></span>
+      <span>near-term GPU cost <b>$0</b></span>
+      <span>north-star <b>GS+SDF hybrid</b></span>
+    </div>
+  </header>
+
+  <h2 class="sr-only">Honesty tier model for the viewer</h2>
+  <div class="legend" aria-label="Three trust tiers that structure the whole recommendation">
+    <div class="tier measured">
+      <div class="name">Tier 0 · measured</div>
+      <h3>Honest but coarse</h3>
+      <p>The Occ3D three-state grid, rendered as three states. Occupied / free / unknown. The layer a reviewer reads a call from. Nothing above may repaint its UNKNOWN as a surface.</p>
+    </div>
+    <div class="tier inferred">
+      <div class="name">Tier 1 · inferred</div>
+      <h3>Legible but derived</h3>
+      <p>Baked texture + tracked dynamics, layered over Tier 0 as an aid. Camera-verified pixels read crisp; grazing-fill or distant-view pixels read visibly softened.</p>
+    </div>
+    <div class="tier speculative">
+      <div class="name">Tier 2 · speculative</div>
+      <h3>Photoreal but invented</h3>
+      <p>The Gaussian splat. Off by default, badged SPECULATIVE. Answers "read the sign / see the car." Never the layer a QA decision is read from.</p>
+    </div>
+  </div>
+
+  <!-- ==================== 1. WHY ==================== -->
+  <section id="why">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2>Why the current approach is structurally capped</h2>
+    </div>
+    <p class="lede pull">
+      Two independent limits, one per goal. Neither is a parameter you can turn up. The geometry is data-resolution-bound;
+      the texture failure is a projection-model error. Naming them correctly is what tells you the fix belongs in the prep
+      step, not the fragment shader.
+    </p>
+
+    <h3 style="font-size:17px;margin:34px 0 0;letter-spacing:-0.01em;">Geometry — a data problem wearing a meshing costume</h3>
+    <p style="margin-top:10px;">
+      The 0.4&nbsp;m Occ3D voxel + Manifold Dual Contouring mesh is coarse and torn not because the mesher is weak, but
+      because the <strong>input grid is coarse and the occupancy is sparse</strong>. A better isosurface over the same grid
+      buys almost nothing. The leverage is in changing the geometry source, not the contouring algorithm. And the coarseness
+      is <em>data-truth</em>: 0.4&nbsp;m is the GT resolution. For the QA layer that is a feature — surfacing it honestly is
+      the point — so this layer stays. The fidelity upgrade belongs to a separate layer.
+    </p>
+
+    <div class="fail-grid">
+      <div class="fail">
+        <span class="tag">Root cause · coverage</span>
+        <h4>No camera looks down</h4>
+        <p>All six nuScenes cameras sit at ego height (~1.5&nbsp;m). The road within a few metres of the ego is either below the FOV or seen at a near-horizontal ray. The live shader binds <code>uTex0..5</code> — frame-0's six cameras only — so it can only ever paint what frame-0 saw. That is a hard coverage hole no per-fragment weighting can fill.</p>
+        <p class="measure"><b>In code:</b> <code>projective.ts:38</code> declares exactly 6 samplers; <code>:92-94</code> pads to 6 and never binds another keyframe.</p>
+      </div>
+      <div class="fail">
+        <span class="tag">Root cause · geometry</span>
+        <h4>Grazing means stretch</h4>
+        <p>For a flat plane the incidence <code>n·dir</code> is ~0 everywhere far from the ego, so one image column smears across a long strip of road — streaks at a low threshold. The code's own grazing gate then <em>culls</em> exactly that road and drops to the grey fallback. The gate that fixes obstacle smear is what greys the ground.</p>
+        <p class="measure"><b>In code:</b> <code>projective.ts:53</code> <code>if (f&nbsp;&lt;=&nbsp;0.15) return vec4(0.0)</code>; <code>data.ts:97</code> then paints the tile neutral grey <code>0.5</code>.</p>
+      </div>
+    </div>
+
+    <div class="rule">
+      <div class="lab">The unexploited signal — already half-built in the repo</div>
+      <p>
+        The ego <strong>drives 10–20&nbsp;m</strong>. Every road patch that grazes frame-0 was driven straight over —
+        seen near-nadir, up close — by <em>some</em> other keyframe. The prep already exploits this for obstacles:
+        <code>voxel_colors_multiframe</code> projects all 39 keyframes into frame-0 ego. But it is baked at the 0.4&nbsp;m
+        voxel resolution (can't read a lane line), used only as a fallback, and the ground gets none of it.
+      </p>
+      <p class="mono-line">
+        the fix is not a new signal &nbsp;<span>→</span>&nbsp; it is running the projection the repo already has,
+        into a high-res per-texel buffer, offline, with best-view selection instead of nearest-z.
+      </p>
+    </div>
+
+    <h3 style="font-size:17px;margin:40px 0 0;letter-spacing:-0.01em;">The honesty axis is the real discriminator</h3>
+    <p style="margin-top:10px;">
+      Watertight methods — Poisson, closed SDF, splat-to-mesh — <strong>hallucinate surface across unobserved gaps</strong>
+      (Screened Poisson's documented "bulging artifact where data are missing"). That is exactly the confident-wrong-surface
+      the QA layer must never present. Occupancy voxels are the one representation that natively carries
+      FREE / OCCUPIED / UNKNOWN. So the honest layer stays occupancy-based, and — the key measured fact —
+      <strong>Occ3D already ships a per-voxel camera-visibility mask</strong> (arXiv 2304.14365): for each occupied voxel,
+      was it hit by any camera ray? The pipeline currently ignores it and decides "seen" from a render-time grazing
+      heuristic instead. That is the root structural gap.
+    </p>
+  </section>
+
+  <!-- ==================== 2. OPTION MATRIX ==================== -->
+  <section id="matrix">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2>The option matrix — geometry reps × texture methods</h2>
+    </div>
+    <p class="lede pull">
+      Rows are colored by the trust tier they belong to: <span style="color:var(--measured);font-weight:640;">measured QA</span>,
+      <span style="color:var(--inferred);font-weight:640;">legible/inferred</span>,
+      <span style="color:var(--speculative);font-weight:640;">photoreal/speculative</span>, and
+      <span style="color:var(--signal);font-weight:640;">rejected</span>. The point of the table is that no single row
+      serves both goals — the honest QA and the legible texture genuinely conflict, so they get purpose-built layers.
+    </p>
+
+    <div class="matrix-scroll">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th scope="col">Representation</th>
+            <th scope="col">Fidelity</th>
+            <th scope="col">Dynamic objects</th>
+            <th scope="col">Web-renderable</th>
+            <th scope="col">GPU cost</th>
+            <th scope="col">Honesty</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-role="qa">
+            <td class="rep">Occ3D 0.4 m + Dual Contouring <small>current · KEEP</small></td>
+            <td class="cell">Coarse — 0.4 m floor, tear-prone</td>
+            <td class="cell">Ghost (multi-sweep smear)</td>
+            <td class="cell"><span class="chip web">native</span></td>
+            <td class="cell"><span class="chip hi">none</span></td>
+            <td class="cell"><span class="chip hi">native 3-state</span></td>
+          </tr>
+          <tr data-role="qa">
+            <td class="rep">BEV 2.5D height-field ground <small>decoupled road layer</small></td>
+            <td class="cell">Continuous, top-down textur­able</td>
+            <td class="cell">N/A (static road)</td>
+            <td class="cell"><span class="chip web">native</span></td>
+            <td class="cell"><span class="chip hi">none · CPU</span></td>
+            <td class="cell"><span class="chip hi">gap = honest hole</span></td>
+          </tr>
+          <tr data-role="qa">
+            <td class="rep">Multi-sweep LiDAR TSDF fusion <small>VDBFusion / nvblox</small></td>
+            <td class="cell">Finer than 0.4 m near-range</td>
+            <td class="cell"><span class="chip mid">needs box removal</span></td>
+            <td class="cell"><span class="chip na">export only</span></td>
+            <td class="cell"><span class="chip hi">CPU offline</span></td>
+            <td class="cell"><span class="chip mid">TSDF free/unknown</span></td>
+          </tr>
+          <tr data-role="legible">
+            <td class="rep">IPM road orthophoto mosaic <small>near-term ground fix</small></td>
+            <td class="cell">5 cm/texel — reads lane lines</td>
+            <td class="cell"><span class="chip mid">mask via box tracks</span></td>
+            <td class="cell"><span class="chip web">native</span></td>
+            <td class="cell"><span class="chip hi">none · CPU</span></td>
+            <td class="cell"><span class="chip mid">coverage channel</span></td>
+          </tr>
+          <tr data-role="legible">
+            <td class="rep">MVS-Texturing UV atlas <small>"Let There Be Color" · obstacles</small></td>
+            <td class="cell">Full-res, sub-voxel signage</td>
+            <td class="cell"><span class="chip mid">mask needed</span></td>
+            <td class="cell"><span class="chip mid">with work</span></td>
+            <td class="cell"><span class="chip hi">CPU offline</span></td>
+            <td class="cell"><span class="chip mid">per-face verified</span></td>
+          </tr>
+          <tr data-role="legible">
+            <td class="rep">Live view-dependent reprojection <small>fix the current shader</small></td>
+            <td class="cell">Marginal over frame-0</td>
+            <td class="cell"><span class="chip lo">still smears</span></td>
+            <td class="cell"><span class="chip mid">234-tex plumbing</span></td>
+            <td class="cell"><span class="chip lo">per-frame</span></td>
+            <td class="cell"><span class="chip lo">heuristic gate</span></td>
+          </tr>
+          <tr data-role="photo">
+            <td class="rep">StreetSurf urban SDF <small>NeuS lineage</small></td>
+            <td class="cell">Clean watertight surface</td>
+            <td class="cell"><span class="chip lo">corrupts static SDF</span></td>
+            <td class="cell"><span class="chip na">export only</span></td>
+            <td class="cell"><span class="chip mid">1–2 h / 3090</span></td>
+            <td class="cell"><span class="chip lo">watertight hallucinates</span></td>
+          </tr>
+          <tr data-role="photo">
+            <td class="rep">3DGS dynamic-decomposed <small>Street Gaussians</small></td>
+            <td class="cell"><span class="chip hi">photoreal</span></td>
+            <td class="cell"><span class="chip hi">per-actor rigid groups</span></td>
+            <td class="cell"><span class="chip web">native</span></td>
+            <td class="cell"><span class="chip mid">~$0.25 / scene</span></td>
+            <td class="cell"><span class="chip lo">fluffy · no free/unknown</span></td>
+          </tr>
+          <tr data-role="photo">
+            <td class="rep">LiDAR-augmented GS+SDF hybrid <small>north star · GS-SDF / 2DGS-TSDF</small></td>
+            <td class="cell"><span class="chip hi">clean metric + photoreal</span></td>
+            <td class="cell"><span class="chip mid">not built-in yet</span></td>
+            <td class="cell"><span class="chip mid">with work</span></td>
+            <td class="cell"><span class="chip mid">~$0.5 / scene</span></td>
+            <td class="cell"><span class="chip mid">needs mask + split</span></td>
+          </tr>
+          <tr data-role="reject">
+            <td class="rep">Camera-only MVS <small>COLMAP / OpenMVS</small></td>
+            <td class="cell">Fails — textureless road</td>
+            <td class="cell">—</td>
+            <td class="cell"><span class="chip na">n/a</span></td>
+            <td class="cell"><span class="chip na">—</span></td>
+            <td class="cell"><span class="chip lo">~0 surround overlap</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px;font-size:13.5px;color:var(--slate);font-family:var(--mono);max-width:var(--measure);line-height:1.55;">
+      Rejected outright: camera-only MVS (surround cams have ~0 stereo overlap, the road is textureless — the documented
+      catastrophic-failure regime) and any raw watertight mesh presented as the QA surface (it bulges over gaps).
+    </p>
+  </section>
+
+  <!-- ==================== 3. THE LAYER MODEL DIAGRAM ==================== -->
+  <section id="layers">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2>The trust-tier stack — what renders, and what may never overwrite what</h2>
+    </div>
+    <p class="lede pull">
+      The two product goals conflict, so one representation cannot serve both. Split the scene into three purpose-built
+      layers stacked in trust order. A decoration above can never repaint the measured layer's UNKNOWN as a surface.
+    </p>
+
+    <figure class="figure">
+      <svg viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="figtitle figdesc">
+        <title id="figtitle">Three stacked trust tiers over the measured occupancy base</title>
+        <desc id="figdesc">A measured occupancy layer at the base carries occupied, free and unknown states; a legible inferred layer of baked texture and tracked dynamics sits above it; a speculative photoreal splat layer sits on top, off by default. A rule states no upper layer may repaint the base layer's unknown as a surface.</desc>
+
+        <!-- vertical trust axis -->
+        <text x="26" y="30" font-family="ui-monospace, monospace" font-size="11" fill="#8A97A2" letter-spacing="1.2">TRUST ↑</text>
+        <line x1="30" y1="44" x2="30" y2="384" stroke="#C2C8C0" stroke-width="1"/>
+        <polygon points="30,40 26,50 34,50" fill="#C2C8C0"/>
+
+        <!-- Tier 2 speculative -->
+        <g>
+          <rect x="70" y="52" width="760" height="86" rx="2" fill="#EAE6F1" stroke="#7A6BA8" stroke-width="1"/>
+          <rect x="70" y="52" width="4" height="86" fill="#7A6BA8"/>
+          <text x="92" y="78" font-family="ui-monospace, monospace" font-size="11" fill="#7A6BA8" letter-spacing="1.5">TIER 2 · SPECULATIVE — off by default</text>
+          <text x="92" y="102" font-family="ui-sans-serif, sans-serif" font-size="17" font-weight="640" fill="#0B0E13">3DGS photoreal splat</text>
+          <text x="92" y="124" font-family="ui-sans-serif, sans-serif" font-size="12.5" fill="#3A424C">Street Gaussians · read the sign, see the car · badged SPECULATIVE · never a QA verdict</text>
+          <text x="812" y="102" text-anchor="end" font-family="ui-monospace, monospace" font-size="12" fill="#7A6BA8">~$0.25/scene</text>
+        </g>
+
+        <!-- Tier 1 inferred -->
+        <g>
+          <rect x="70" y="150" width="760" height="86" rx="2" fill="#F3EAD6" stroke="#B8892B" stroke-width="1"/>
+          <rect x="70" y="150" width="4" height="86" fill="#B8892B"/>
+          <text x="92" y="176" font-family="ui-monospace, monospace" font-size="11" fill="#B8892B" letter-spacing="1.5">TIER 1 · INFERRED — the aid, layered over base</text>
+          <text x="92" y="200" font-family="ui-sans-serif, sans-serif" font-size="17" font-weight="640" fill="#0B0E13">Baked texture + tracked dynamics</text>
+          <text x="92" y="222" font-family="ui-sans-serif, sans-serif" font-size="12.5" fill="#3A424C">IPM ground orthophoto · UV atlas obstacles · box-track cars · crisp = verified, soft = filled</text>
+          <text x="812" y="200" text-anchor="end" font-family="ui-monospace, monospace" font-size="12" fill="#B8892B">$0 · CPU</text>
+        </g>
+
+        <!-- Tier 0 measured -->
+        <g>
+          <rect x="70" y="248" width="760" height="100" rx="2" fill="#E3EFEB" stroke="#2E7D6B" stroke-width="1.5"/>
+          <rect x="70" y="248" width="4" height="100" fill="#2E7D6B"/>
+          <text x="92" y="274" font-family="ui-monospace, monospace" font-size="11" fill="#2E7D6B" letter-spacing="1.5">TIER 0 · MEASURED — decision-grade base</text>
+          <text x="92" y="298" font-family="ui-sans-serif, sans-serif" font-size="17" font-weight="640" fill="#0B0E13">Occ3D three-state occupancy</text>
+          <!-- three-state chips -->
+          <g font-family="ui-monospace, monospace" font-size="11">
+            <rect x="92" y="312" width="86" height="24" rx="2" fill="#2E7D6B"/>
+            <text x="135" y="328" text-anchor="middle" fill="#fff">OCCUPIED</text>
+            <rect x="186" y="312" width="60" height="24" rx="2" fill="#fff" stroke="#2E7D6B"/>
+            <text x="216" y="328" text-anchor="middle" fill="#2E7D6B">FREE</text>
+            <rect x="254" y="312" width="96" height="24" rx="2" fill="none" stroke="#5B6B7A" stroke-dasharray="3 3"/>
+            <text x="302" y="328" text-anchor="middle" fill="#5B6B7A">UNKNOWN</text>
+          </g>
+          <text x="812" y="298" text-anchor="end" font-family="ui-monospace, monospace" font-size="12" fill="#2E7D6B">already shipping</text>
+        </g>
+
+        <!-- the invariant -->
+        <g>
+          <line x1="70" y1="372" x2="830" y2="372" stroke="#C7502E" stroke-width="1" stroke-dasharray="2 3"/>
+          <text x="70" y="398" font-family="ui-monospace, monospace" font-size="12" fill="#C7502E" font-weight="600">INVARIANT</text>
+          <text x="168" y="398" font-family="ui-sans-serif, sans-serif" font-size="13" fill="#1A2029">no upper layer may repaint the base layer's UNKNOWN as a confident surface.</text>
+          <text x="70" y="420" font-family="ui-sans-serif, sans-serif" font-size="13" fill="#1A2029">Fill texture only into camera-observed voxels — the visibility mask is the lie/pinhole discriminator.</text>
+        </g>
+      </svg>
+      <figcaption>
+        <b>The layer model.</b> Tier 0 is the only layer a QA call is read from; its coarseness is data-truth, not a defect
+        to hide. Tiers 1–2 sit above as legibility aids and carry their own provenance. The dashed red line is the one rule
+        that keeps the whole stack honest.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ==================== 4. RECOMMENDED PIPELINE ==================== -->
+  <section id="pipeline">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <h2>Recommended pipeline — two horizons, ranked</h2>
+    </div>
+
+    <div class="rec-lead">
+      <p>
+        <strong>Do not replace the occupancy mesh, and do not fix this in the live shader.</strong> The through-line:
+        stop forward-projecting appearance at render time; bake it once, offline, into a resolution-independent per-texel
+        buffer with explicit best-view selection and a per-texel coverage channel. That is what makes texture both
+        <strong>complete</strong> (uses all 39 frames' near-nadir views) and <strong>honest</strong> (verified-vs-unseen
+        is a stored, renderable fact, not a guess).
+      </p>
+    </div>
+
+    <!-- HORIZON A -->
+    <div class="horizon-label">
+      <span class="badge">Horizon A</span>
+      <h3>Near-term — lands in this web pipeline, days, $0 GPU</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step" data-tier="inferred">
+        <div class="rank">1</div>
+        <div class="body">
+          <h4>IPM ground orthophoto <span class="where">fixes the confirmed grey ground</span></h4>
+          <p>
+            Reuse the existing 39-keyframe loop in <code>prep_occ.py</code>. For each keyframe's 6 cams, inverse-project the
+            road pixels to world (x,y) via a <strong>per-cell ground homography</strong> — use the existing
+            <code>ground_heightfield</code> z per column, not one global plane, so curbs don't smear. Accumulate into a
+            world-aligned BEV raster at ~5 cm/texel. Per texel keep <code>argmax( head-on × near × static × unoccluded )</code>:
+            head-on rewards the frame that drove most-nadir over the patch, static = 0 inside a nuScenes 3D box (kills ghost
+            cars), unoccluded from the existing depth prepass. Emit one orthophoto PNG + transform; replace the grey ground
+            color in <code>data.ts:97</code> with a UV sample. Where coverage == 0, render the honest gap style — never a fabricated color.
+          </p>
+          <div class="files">
+            <span class="chip web">prep_occ.py</span>
+            <span class="chip web">data.ts:97</span>
+            <span class="chip web">+1 PNG/scene</span>
+          </div>
+          <div class="result">
+            <b>Expected:</b> both root causes gone by construction — the ego drove over every patch near-nadir (coverage),
+            and you pick the near-nadir sample (no stretch). Reads lane lines / crosswalks the 0.4 m voxel color never could.
+            <span class="honesty">Honesty:</span> per-texel coverage channel; unseen road stays an explicit hole.
+          </div>
+          <div class="score">
+            <span class="s">impact <b>high</b></span>
+            <span class="s">feasibility <b>high</b></span>
+            <span class="s">honesty <b>high</b></span>
+            <span class="s">cost <b>~1–2 h + seconds/scene</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" data-tier="measured">
+        <div class="rank">2</div>
+        <div class="body">
+          <h4>Camera-visibility gate replaces the grazing heuristic <span class="where">the root-cause honesty fix</span></h4>
+          <p>
+            Export Occ3D's per-voxel <strong>camera-visibility mask</strong> into the web payload as a measured bit. Drive the
+            seen/unseen decision from that mask, not the render-time grazing gate: a voxel observed by any keyframe is eligible
+            for crisp texture (pull the best head-on keyframe — this is the legitimate labeling-pinhole fill); a voxel unobserved
+            in every keyframe (the blind spot under the ego) renders INFERRED — desaturated, blurred, hatched — or as a gap.
+            Keep the grazing gate only as a per-view blend weight. This turns "seen" from a heuristic into a labelled fact.
+          </p>
+          <div class="files">
+            <span class="chip web">Occ3D cam-mask export</span>
+            <span class="chip web">projective.ts:53</span>
+          </div>
+          <div class="result">
+            <b>Expected:</b> the streak-or-grey dichotomy becomes an honest measured/inferred split, using data already on disk.
+            <span class="honesty">Honesty:</span> the single highest-leverage change — makes "inference shown as measurement" structurally hard.
+          </div>
+          <div class="score">
+            <span class="s">impact <b>high</b></span>
+            <span class="s">feasibility <b>high</b></span>
+            <span class="s">honesty <b>highest</b></span>
+            <span class="s">cost <b>data plumbing, no GPU</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" data-tier="inferred">
+        <div class="rank">3</div>
+        <div class="body">
+          <h4>Dynamic-object layer from box tracks <span class="where">un-ghost the moving actors</span></h4>
+          <p>
+            Pull moving cars/peds from the nuScenes 3D box tracks into their own time-stamped layer, marked TRACKED. Mask their
+            multi-sweep ghost tail out of the static layers (voxels inside a moving box over time). A smeared car shown as solid
+            static geometry is a fabricated obstacle — this removes one of the three named fabrication classes.
+          </p>
+          <div class="files"><span class="chip web">nuScenes box tracks</span><span class="chip web">static-layer mask</span></div>
+          <div class="result">
+            <b>Expected:</b> the Occ3D dynamic ghosting stops reading as static structure. <span class="honesty">Honesty:</span> tracks are shown as tracks, not measured surface.
+          </div>
+          <div class="score">
+            <span class="s">impact <b>med</b></span>
+            <span class="s">feasibility <b>high</b></span>
+            <span class="s">honesty <b>high</b></span>
+            <span class="s">cost <b>ingest + mask, no GPU</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step" data-tier="measured">
+        <div class="rank">4</div>
+        <div class="body">
+          <h4>The honesty UI contract <span class="where">the actual deliverable of this axis</span></h4>
+          <p>
+            A persistent measured / inferred / speculative provenance badge; an always-available <strong>"measured-only" toggle</strong>
+            that strips every inferred pixel to show the raw sensor footprint; a legend. Encode the honesty axis on
+            <strong>crispness + transparency + hatching</strong> — never a second hue (cartography-validated, and it composes with
+            the repo's "color belongs to data" design law). This makes inference-shown-as-measurement structurally unrepresentable.
+          </p>
+          <div class="files"><span class="chip web">UI state</span><span class="chip web">shader uniform/layer</span><span class="chip web">legend</span></div>
+          <div class="result">
+            <b>Expected:</b> even the Tier-2 splat is safe because it is quarantined and badged. <span class="honesty">Honesty:</span> extends Aletheon's "tagged by which oracle backs it" from queries to the viewer.
+          </div>
+          <div class="score"><span class="s">impact <b>high</b></span><span class="s">feasibility <b>high</b></span><span class="s">honesty <b>foundational</b></span><span class="s">cost <b>UI only</b></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HORIZON B -->
+    <div class="horizon-label">
+      <span class="badge">Horizon B</span>
+      <h3>Longer-term — the representation to move to for "really proper"</h3>
+    </div>
+
+    <div class="steps">
+      <div class="step" data-tier="inferred">
+        <div class="rank">5</div>
+        <div class="body">
+          <h4>MVS-Texturing UV atlas for the obstacle mesh <span class="where">"Let There Be Color", Waechter 2014</span></h4>
+          <p>
+            The general form of the orthophoto for non-planar geometry. xatlas-unwrap the DC mesh; a best-view MRF picks the single
+            best of all 39×6 images per face (data = projected area × sharpness, gated by occlusion + photo-consistency outlier
+            reject; Potts smoothness via graph cut), then global seam-leveling + Poisson blend hides exposure seams. Bake to one atlas
+            PNG sampled with static UVs. <strong>Sequence after A and after mesh de-tearing</strong> — atlas quality is capped by the
+            shredded 0.4 m mesh (12% of voxels ≤1 neighbour); texturing a torn mesh just makes torn texture.
+          </p>
+          <div class="score"><span class="s">impact <b>high (obstacles)</b></span><span class="s">feasibility <b>med</b></span><span class="s">honesty <b>per-face verified</b></span><span class="s">cost <b>~1–2 days, CPU</b></span></div>
+        </div>
+      </div>
+
+      <div class="step" data-tier="measured">
+        <div class="rank">6</div>
+        <div class="body">
+          <h4>Multi-sweep LiDAR TSDF for a finer obstacle mesh <span class="where">optional geometry upgrade</span></h4>
+          <p>
+            Accumulate all 39 keyframe LiDAR sweeps into an offline TSDF (VDBFusion on CPU or nvblox), removing dynamic points first
+            via the box tracks. Ship the fused mesh as a static glTF. Accumulation beats the 32-beam sparsity on static structure and
+            gives finer-than-0.4 m near-range surface with an honest free/unknown truncation. A better mesh for Tier 1 to texture.
+          </p>
+          <div class="score"><span class="s">impact <b>med</b></span><span class="s">feasibility <b>med</b></span><span class="s">honesty <b>TSDF free/unknown</b></span><span class="s">cost <b>CPU offline, $0 serve</b></span></div>
+        </div>
+      </div>
+
+      <div class="step" data-tier="speculative">
+        <div class="rank">7</div>
+        <div class="body">
+          <h4>North star — LiDAR-augmented GS+SDF hybrid <span class="where">GS-SDF / 2DGS-TSDF lineage</span></h4>
+          <p>
+            One optimization yielding both a clean metric surface (LiDAR-anchored) and photoreal texture. This is the cleanest
+            textured surface on a LiDAR budget <em>if</em> it matures on surround-view nuScenes — today it is research-early on driving
+            + sparse 32-beam. Hard requirement before it can ever approach the QA tier: <strong>intersect the extracted surface with
+            the observed/occupancy mask</strong> so watertightness never hallucinates confirmed surface over unknown space, plus a
+            per-Gaussian uncertainty channel. Until then the splat stays quarantined as the badged Tier-2 appearance aid.
+          </p>
+          <div class="score"><span class="s">impact <b>high (ceiling)</b></span><span class="s">feasibility <b>low today</b></span><span class="s">honesty <b>needs mask + UQ</b></span><span class="s">cost <b>~$0.5/scene</b></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rule">
+      <div class="lab">One line to enforce everywhere — the legitimate-fill rule</div>
+      <p>
+        Fill or interpolate texture <strong>only</strong> into camera-observed voxels. A voxel unobserved in every keyframe is
+        never given a confident surface. The far road that grazes frame-0 but was driven over 10 keyframes later is a legitimate
+        fill; the down-looking blind spot under the ego is the canonical lie.
+      </p>
+      <p class="mono-line">
+        legitimate fill &nbsp;<span>=</span>&nbsp; observed-elsewhere &nbsp;·&nbsp; lie &nbsp;<span>=</span>&nbsp; observed-nowhere &nbsp;<span>·</span>&nbsp; the visibility mask IS the discriminator
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================== SOURCES ==================== -->
+  <section id="sources">
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <h2>Key prior art</h2>
+    </div>
+    <ul class="sources">
+      <li><b>Occ3D</b> arXiv 2304.14365 — three-state grid + per-voxel LiDAR & camera visibility masks; eval on observed voxels only. The data-native measured bit.</li>
+      <li><b>Let There Be Color!</b> Waechter et al., ECCV 2014 — best-view MRF (projected area/gradient, Potts smoothness) + seam-leveling + Poisson blend. Ref impl <code>nmoehrle/mvs-texturing</code>.</li>
+      <li><b>Street Gaussians</b> arXiv 2401.01339, ECCV 2024 — static/dynamic decomposition, per-actor rigid groups + 4D SH. <b>DrivingGaussian</b> CVPR 2024 — nuScenes surround-native.</li>
+      <li><b>StreetSurf</b> arXiv 2306.04988 — hash-grid SDF, mono-depth priors, road-surface init, 1–2 h on a single RTX-3090; no dynamic decomposition.</li>
+      <li><b>IPM / BEV homography</b> — plane→plane road resampling, flat-road assumption + its incline failure. <b>RoadBEV</b> arXiv 2404.06605 — learned road elevation (stereo 0.5 cm) to relax flatness.</li>
+      <li><b>2DGS</b> arXiv 2403.17888 · <b>GS-SDF</b> arXiv 2503.10170 · <b>RaDe-GS</b> 2406.01467 — LiDAR-augmented splat+SDF meshing; research-early on driving.</li>
+      <li><b>Screened Poisson</b> Kazhdan/Hoppe, ACM TOG 2013 — watertight, "bulging artifact where data are missing". The honesty-hostile baseline.</li>
+      <li><b>COLMAP / MP-SfM</b> arXiv 2504.20040 — "fails catastrophically for triplets with least overlap"; assumes sufficient overlap + texture. Why camera-only MVS is rejected.</li>
+      <li><b>Uncertainty viz / cartography</b> — transparency, value, crispness effective; hatching the standard extrinsic overlay; hue/saturation poor. Basis for the honesty encoding.</li>
+      <li><b>NeRO</b> arXiv 2405.10554 — neural road orthophoto MLP (x,y)→(z,RGB); the coverage-gated fallback if the pure IPM mosaic reads too blurry.</li>
+    </ul>
+  </section>
+
+  <p class="footnote">
+    Repo references verified this session against
+    <code>web/components/freespace/projective.ts</code> (samplers :38, grazing reject :53, 6-sampler pad :92–94) and
+    <code>web/components/freespace/data.ts</code> (ground heightfield :70–95, neutral-grey fallback :97). ·
+    Synthesized from five research findings; the "test" placeholder finding was discarded as empty. ·
+    Honesty framing follows the repo's own Aletheon / "color belongs to data" design law.
+  </p>
+</div>

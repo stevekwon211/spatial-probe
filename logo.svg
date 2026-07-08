@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+  <!-- spatial-probe: occupancy-voxel mark.
+       2x2 grid, one shared geometry: margin 2 / cell 12 / gutter 4 / cell 12 / margin 2 = 32.
+       all coords even -> 2:1 favicon downscale lands on whole pixels.
+       three free-space cells = 2px hairline wall (currentColor); one occupied/probed cell = solid accent.
+       the ONLY difference between cells is fill-vs-outline. rx=0 => pixel-pure, no anti-alias. -->
+  <g stroke="currentColor" stroke-width="2">
+    <rect x="3"  y="3"  width="10" height="10"/>
+    <rect x="3"  y="19" width="10" height="10"/>
+    <rect x="19" y="19" width="10" height="10"/>
+  </g>
+  <rect x="18" y="2" width="12" height="12" fill="#2BB0A4"/>
+</svg>

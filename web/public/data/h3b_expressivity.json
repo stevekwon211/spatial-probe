@@ -1,0 +1,208 @@
+{
+  "experiment": "occquery_v0 / H3b",
+  "preregistration": "h3b_expressivity_preregistration.md (SEALED, commit a47b500)",
+  "result_class": "real-AV2 (solo/CPU, non-circular for both legs)",
+  "commit": "a47b5003e369a9ee79ffb68667a7f88381d29b67",
+  "seed": 0,
+  "data_root": "/Users/doeonkwon/Projects/Personal/spatial-probe/data/danger/av2_sensor",
+  "leg1_expressivity": {
+    "per_family": {
+      "clearance": {
+        "n_queries": 5,
+        "occupancy_expressible": 5,
+        "occupancy_coverage_pct": 100.0,
+        "box_only_expressible": 0,
+        "box_only_coverage_pct": 0.0,
+        "gap_pct": 100.0,
+        "query_ids": [
+          "grazing_side_clearance",
+          "tight_clearance_at_speed",
+          "moderate_side_clearance_at_speed",
+          "tight_side_clearance",
+          "moderate_side_clearance"
+        ],
+        "occupancy_ran_real_av2": [
+          "grazing_side_clearance",
+          "tight_clearance_at_speed",
+          "moderate_side_clearance_at_speed",
+          "tight_side_clearance",
+          "moderate_side_clearance"
+        ]
+      },
+      "centerline": {
+        "n_queries": 5,
+        "occupancy_expressible": 5,
+        "occupancy_coverage_pct": 100.0,
+        "box_only_expressible": 0,
+        "box_only_coverage_pct": 0.0,
+        "gap_pct": 100.0,
+        "query_ids": [
+          "centerline_obstacle_grazing",
+          "centerline_obstacle_tight",
+          "centerline_obstacle_moderate_at_urban_speed",
+          "centerline_obstacle_moderate",
+          "centerline_obstacle_tight_at_speed"
+        ],
+        "occupancy_ran_real_av2": [
+          "centerline_obstacle_grazing",
+          "centerline_obstacle_tight",
+          "centerline_obstacle_moderate_at_urban_speed",
+          "centerline_obstacle_moderate",
+          "centerline_obstacle_tight_at_speed"
+        ]
+      },
+      "free_path": {
+        "n_queries": 5,
+        "occupancy_expressible": 5,
+        "occupancy_coverage_pct": 100.0,
+        "box_only_expressible": 0,
+        "box_only_coverage_pct": 0.0,
+        "gap_pct": 100.0,
+        "query_ids": [
+          "free_path_blocked_within_body_length",
+          "free_path_is_blocked",
+          "free_path_blocked_at_two_second_horizon",
+          "free_path_blocked_at_long_range_high_speed",
+          "free_path_blocked_or_side_clearance_tight"
+        ],
+        "occupancy_ran_real_av2": [
+          "free_path_blocked_within_body_length",
+          "free_path_is_blocked",
+          "free_path_blocked_at_two_second_horizon",
+          "free_path_blocked_at_long_range_high_speed",
+          "free_path_blocked_or_side_clearance_tight"
+        ]
+      },
+      "corridor": {
+        "n_queries": 5,
+        "occupancy_expressible": 5,
+        "occupancy_coverage_pct": 100.0,
+        "box_only_expressible": 0,
+        "box_only_coverage_pct": 0.0,
+        "gap_pct": 100.0,
+        "query_ids": [
+          "corridor_pinches_fully_shut",
+          "near_corridor_below_vehicle_width",
+          "corridor_narrows_below_vehicle_width",
+          "far_corridor_below_vehicle_width",
+          "corridor_below_half_meter"
+        ],
+        "occupancy_ran_real_av2": [
+          "corridor_pinches_fully_shut",
+          "near_corridor_below_vehicle_width",
+          "corridor_narrows_below_vehicle_width",
+          "far_corridor_below_vehicle_width",
+          "corridor_below_half_meter"
+        ]
+      },
+      "box_baseline": {
+        "n_queries": 4,
+        "occupancy_expressible": 0,
+        "occupancy_coverage_pct": 0.0,
+        "box_only_expressible": 4,
+        "box_only_coverage_pct": 100.0,
+        "gap_pct": -100.0,
+        "query_ids": [
+          "near_a_tracked_vehicle",
+          "within_one_carlength_of_a_tracked_vehicle",
+          "near_a_tracked_pedestrian",
+          "near_a_tracked_bicycle"
+        ],
+        "occupancy_ran_real_av2": []
+      }
+    },
+    "overall": {
+      "n_queries": 24,
+      "occupancy_expressible": 20,
+      "occupancy_coverage_pct": 83.3,
+      "box_only_expressible": 4,
+      "box_only_coverage_pct": 16.7,
+      "gap_pct": 66.7
+    },
+    "free_space_families_only": {
+      "n_queries": 20,
+      "occupancy_expressible": 20,
+      "occupancy_coverage_pct": 100.0,
+      "box_only_expressible": 0,
+      "box_only_coverage_pct": 0.0,
+      "gap_pct": 100.0,
+      "families": [
+        "clearance",
+        "centerline",
+        "free_path",
+        "corridor"
+      ]
+    },
+    "probe_scene": "d5d6f11c-3026-3e0e-9d67-c111233e22de",
+    "kill_H1_falsified_box_expresses_freespace": false
+  },
+  "leg2_fp_denotation": {
+    "substrate": "held-out free-driving logs (oracle_heldout_logs.json), ego in-path swept ribbon, far=3.9, window=10 frames",
+    "n_logs": 8,
+    "n_usable_frames": 1177,
+    "predicate_denotation_vs_traversal_FREE": {
+      "free_along_ego_path@0.5s": {
+        "denotes_free": 1177,
+        "n_frames": 1177,
+        "agreement_rate": 1.0
+      },
+      "min_free_width_open@0.5s": {
+        "open_gt0": 1177,
+        "n_frames": 1177,
+        "agreement_rate": 1.0
+      },
+      "free_along_ego_path@1.0s": {
+        "denotes_free": 1177,
+        "n_frames": 1177,
+        "agreement_rate": 1.0
+      },
+      "min_free_width_open@1.0s": {
+        "open_gt0": 1177,
+        "n_frames": 1177,
+        "agreement_rate": 1.0
+      },
+      "free_along_ego_path@2.0s": {
+        "denotes_free": 1174,
+        "n_frames": 1177,
+        "agreement_rate": 0.9975
+      },
+      "min_free_width_open@2.0s": {
+        "open_gt0": 1177,
+        "n_frames": 1177,
+        "agreement_rate": 1.0
+      },
+      "free_along_ego_path@4.0s": {
+        "denotes_free": 1150,
+        "n_frames": 1177,
+        "agreement_rate": 0.9771
+      },
+      "min_free_width_open@4.0s": {
+        "open_gt0": 1177,
+        "n_frames": 1177,
+        "agreement_rate": 1.0
+      }
+    },
+    "headline_free_path_agreement": 0.9936,
+    "headline_free_path_evals": {
+      "denotes_free": 4678,
+      "n": 4708
+    },
+    "voxel_ribbon_fp": {
+      "true_fp_mean": 0.0,
+      "true_fp_ci": [
+        0.0,
+        0.0
+      ],
+      "note": "occupancy false-positive rate inside the provably-FREE driven ribbon = the oracle_traversal estimand on the query predicates' substrate; 0 => occupancy never places an obstacle in space the ego physically traversed."
+    },
+    "box_only_free_space_denotation": "INAPPLICABLE",
+    "box_only_note": "box-only (RefAV cuboid+map) has NO free-space primitive, so it cannot produce a free-space denotation to grade -- INAPPLICABLE, not 0.",
+    "kill_Leg2_fails_occupancy_false_blocks_driven_path": false
+  },
+  "verdict": {
+    "expressivity_dominance": true,
+    "fp_side_denotation_correct": true,
+    "both_sided_20F1_gap": "NOT CLAIMED (GPU-gated: BLOCKED-side unboxed-obstacle recall empirically closed solo/CPU this session, per the pre-reg honest bound)"
+  },
+  "honest_bound": "Full both-sided >=20-F1 denotation gap needs BLOCKED-side truth (unboxed-obstacle recall) = a cross-modal oracle empirically CLOSED solo/CPU this session (stereo AUC 0.259 / DAv2 scale >9 m / free-driving vacuity), GPU-gated. NOT claimed here. Claimed: expressivity dominance (Leg 1) + FP-side denotation correctness with box-only inapplicability (Leg 2)."
+}
