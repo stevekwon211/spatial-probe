@@ -5,4 +5,4 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 cd "$repo_root"
 
-bash .codex/cloud/setup.sh
+echo "$(basename "$repo_root") Codex Cloud maintenance complete."
